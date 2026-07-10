@@ -23,7 +23,7 @@ export default function Landing() {
           <p className="mt-5 text-2xl md:text-3xl font-semibold text-brand-accent">
             Compassionate care, whenever you need it.
           </p>
-          <p className="mt-6 text-lg md:text-xl text-slate-700 max-w-2xl mx-auto">
+          <p className="mt-6 text-lg md:text-xl leading-relaxed text-slate-700 max-w-2xl mx-auto">
             Our doctors, nurses, and specialists are here around the clock for emergencies,
             specialist consultations, maternity care, surgery, and laboratory services, all under one roof.
           </p>
