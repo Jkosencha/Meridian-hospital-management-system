@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-brand-lavender flex flex-col">
+    <div className="min-h-screen bg-blue-300 flex flex-col">
       <header className="sticky top-0 z-10 bg-brand-navy">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-5">
           <span className="text-lg font-bold text-white">Meridian Hospital</span>
