@@ -37,7 +37,7 @@ function AppointmentsTable({ rows, onStatusChange, onView, onPrescribe }) {
     <div className="overflow-x-auto">
       <table className="w-full text-xs whitespace-nowrap">
         <thead>
-          <tr className="text-left uppercase tracking-wide text-slate-500 bg-slate-50">
+          <tr className="text-left uppercase tracking-wide text-slate-500 bg-slate-100">
             <th className="px-3 py-2.5 font-medium">Name</th>
             <th className="px-3 py-2.5 font-medium">Date</th>
             <th className="px-3 py-2.5 font-medium">Time</th>
@@ -52,7 +52,7 @@ function AppointmentsTable({ rows, onStatusChange, onView, onPrescribe }) {
         </thead>
         <tbody>
           {rows.map((appointment) => (
-            <tr key={appointment.id} className="border-t border-slate-200 hover:bg-slate-50">
+            <tr key={appointment.id} className="border-t border-slate-200 hover:bg-slate-100">
               <td className="px-3 py-2.5 text-slate-900 font-medium">{appointment.name}</td>
               <td className="px-3 py-2.5 text-slate-600">{appointment.date}</td>
               <td className="px-3 py-2.5 text-slate-600">{appointment.time}</td>
@@ -134,7 +134,7 @@ export default function DoctorDashboard() {
   const pendingCount = appointments.filter((appt) => appt.status === 'Pending').length
 
   return (
-    <div className="min-h-screen flex bg-brand-lavender">
+    <div className="min-h-screen flex bg-blue-300">
       <Sidebar
         navItems={navItems}
         activeKey={tab}
@@ -160,7 +160,7 @@ export default function DoctorDashboard() {
               </div>
             </div>
 
-            <div className="mt-8 border border-slate-200 bg-white overflow-hidden">
+            <div className="mt-8 border border-slate-200 bg-blue-200 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-200">
                 <h2 className="text-sm font-medium text-slate-900">Next up</h2>
               </div>
@@ -178,7 +178,7 @@ export default function DoctorDashboard() {
           <>
             <h1 className="text-xl font-semibold text-slate-900">Appointments</h1>
             <p className="text-sm text-slate-500 mt-0.5">{today}</p>
-            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
+            <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
               <AppointmentsTable
                 rows={appointments}
                 onStatusChange={handleStatusChange}
