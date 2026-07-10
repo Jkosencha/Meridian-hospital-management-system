@@ -1,448 +1,683 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import Sidebar from '../components/Sidebar'
+import Modal from '../components/Modal'
 
-const ReceptionistDashboard = () => {
-  const [patientRecords, setPatientRecords] = useState([
-    {
-      id: 1,
-      name: "John Doe",
-      age: 42,
-      gender: "Male",
-      contact: "555-0123",
-      reason: "General check-up",
-    },
-    {
-      id: 2,
-      name: "Amina Hassan",
-      age: 29,
-      gender: "Female",
-      contact: "555-0456",
-      reason: "Prescription refill",
-    },
-  ]);
+const navItems = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'patients', label: 'Patients' },
+  { key: 'appointments', label: 'Book Appointments' },
+]
 
-  const [appointmentBookings, setAppointmentBookings] = useState([
-    {
-      id: 1,
-      patientName: "John Doe",
-      doctor: "Dr. Kamau",
-      date: "2026-07-15",
-      time: "10:30",
-      status: "Confirmed",
-    },
-    {
-      id: 2,
-      patientName: "Amina Hassan",
-      doctor: "Dr. Mwangi",
-      date: "2026-07-16",
-      time: "14:00",
-      status: "Pending",
-    },
-  ]);
+const specialties = [
+  'General Practitioner',
+  'Cardiologist',
+  'Gynecologist',
+  'Dentist',
+  'Endocrinologist',
+  'Pediatrician',
+]
 
-  const [newPatient, setNewPatient] = useState({
-    name: "",
-    age: "",
-    gender: "",
-    contact: "",
-    reason: "",
-  });
-  const [patientEditId, setPatientEditId] = useState(null);
+const initialPatients = [
+  {
+    id: '4763462',
+    name: 'Leo Thuku',
+    date: '2026-07-08',
+    gender: 'Male',
+    contact: '+254700000001',
+    age: 20,
+  },
+  {
+    id: '7346473',
+    name: 'Daniel Brooks',
+    date: '2026-07-09',
+    gender: 'Male',
+    contact: '+254700000002',
+    age: 35,
+  },
+  {
+    id: '3764522',
+    name: 'Sarah Kim',
+    date: '2026-07-10',
+    gender: 'Female',
+    contact: '+254700000003',
+    age: 41,
+  },
+]
 
-  const [newAppointment, setNewAppointment] = useState({
-    patientName: "",
-    doctor: "",
-    date: "",
-    time: "",
-    status: "Pending",
-  });
-  const [appointmentEditId, setAppointmentEditId] = useState(null);
+const initialAppointments = [
+  {
+    id: '23456789',
+    name: 'Wanjiru Kamau',
+    date: '2026-07-10',
+    time: '09:00 AM',
+    number: '+254 712 345 678',
+    gender: 'Female',
+    age: 34,
+    specialty: 'General Practitioner',
+    status: 'Pending',
+  },
+  {
+    id: '24567890',
+    name: 'Otieno Onyango',
+    date: '2026-07-10',
+    time: '09:45 AM',
+    number: '+254 723 456 789',
+    gender: 'Male',
+    age: 52,
+    specialty: 'Cardiologist',
+    status: 'Pending',
+  },
+]
 
-  useEffect(() => {
-    document.title = "Receptionist Dashboard";
-  }, []);
+function generateId() {
+  return String(Math.floor(10000000 + Math.random() * 90000000))
+}
 
-  const totalPatients = useMemo(() => patientRecords.length, [patientRecords]);
-  const upcomingAppointments = useMemo(
-    () => appointmentBookings.filter((booking) => booking.status !== "Cancelled"),
-    [appointmentBookings]
-  );
+function countDigits(value) {
+  return (value.match(/\d/g) || []).length
+}
 
-  const handlePatientChange = useCallback((event) => {
-    const { name, value } = event.target;
-    setNewPatient((prev) => ({ ...prev, [name]: value }));
-  }, []);
+const emptyPatientForm = { name: '', date: '', gender: 'Male', contact: '', age: '' }
+const emptyAppointmentForm = {
+  name: '',
+  date: '',
+  time: '',
+  number: '',
+  gender: 'Male',
+  age: '',
+  specialty: specialties[0],
+}
 
-  const handleAppointmentChange = useCallback((event) => {
-    const { name, value } = event.target;
-    setNewAppointment((prev) => ({ ...prev, [name]: value }));
-  }, []);
+function PatientsTable({ rows, onView, onEdit }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs whitespace-nowrap">
+        <thead>
+          <tr className="text-left uppercase tracking-wide text-slate-500 bg-slate-100">
+            <th className="px-3 py-2.5 font-medium">Name</th>
+            <th className="px-3 py-2.5 font-medium">Date</th>
+            <th className="px-3 py-2.5 font-medium">ID</th>
+            <th className="px-3 py-2.5 font-medium">Gender</th>
+            <th className="px-3 py-2.5 font-medium">Contact</th>
+            <th className="px-3 py-2.5 font-medium">Age</th>
+            <th className="px-3 py-2.5 font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan="7" className="px-3 py-6 text-center text-slate-500">
+                No patients available
+              </td>
+            </tr>
+          ) : (
+            rows.map((patient) => (
+              <tr key={patient.id} className="border-t border-slate-200 hover:bg-slate-100">
+                <td className="px-3 py-2.5 text-slate-900 font-medium">{patient.name}</td>
+                <td className="px-3 py-2.5 text-slate-600">{patient.date}</td>
+                <td className="px-3 py-2.5 text-slate-600">{patient.id}</td>
+                <td className="px-3 py-2.5 text-slate-600">{patient.gender}</td>
+                <td className="px-3 py-2.5 text-slate-600">{patient.contact}</td>
+                <td className="px-3 py-2.5 text-slate-600">{patient.age}</td>
+                <td className="px-3 py-2.5">
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => onView(patient)}
+                      className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
+                    >
+                      View
+                    </button>
+                    <button
+                      onClick={() => onEdit(patient)}
+                      className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
-  const savePatientRecord = useCallback(
-    (event) => {
-      event.preventDefault();
-      if (!newPatient.name || !newPatient.contact) {
-        return;
-      }
+const statusTextColor = {
+  Pending: 'text-amber-700',
+  Completed: 'text-green-700',
+  Cancelled: 'text-slate-500',
+}
 
-      if (patientEditId) {
-        setPatientRecords((prev) =>
-          prev.map((patient) =>
-            patient.id === patientEditId
-              ? {
-                  ...patient,
-                  name: newPatient.name.trim(),
-                  age: Number(newPatient.age) || "N/A",
-                  gender: newPatient.gender || "Unspecified",
-                  contact: newPatient.contact.trim(),
-                  reason: newPatient.reason.trim() || "General inquiry",
-                }
-              : patient
-          )
-        );
-        setPatientEditId(null);
-      } else {
-        setPatientRecords((prev) => [
-          ...prev,
-          {
-            id: prev.length + 1,
-            name: newPatient.name.trim(),
-            age: Number(newPatient.age) || "N/A",
-            gender: newPatient.gender || "Unspecified",
-            contact: newPatient.contact.trim(),
-            reason: newPatient.reason.trim() || "General inquiry",
-          },
-        ]);
-      }
+function AppointmentsTable({ rows, onView, onEdit }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs whitespace-nowrap">
+        <thead>
+          <tr className="text-left uppercase tracking-wide text-slate-500 bg-slate-100">
+            <th className="px-3 py-2.5 font-medium">Name</th>
+            <th className="px-3 py-2.5 font-medium">Date</th>
+            <th className="px-3 py-2.5 font-medium">Time</th>
+            <th className="px-3 py-2.5 font-medium">Contact</th>
+            <th className="px-3 py-2.5 font-medium">Gender</th>
+            <th className="px-3 py-2.5 font-medium">Age</th>
+            <th className="px-3 py-2.5 font-medium">Specialty</th>
+            <th className="px-3 py-2.5 font-medium">Status</th>
+            <th className="px-3 py-2.5 font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan="9" className="px-3 py-6 text-center text-slate-500">
+                No appointments booked
+              </td>
+            </tr>
+          ) : (
+            rows.map((appointment) => (
+              <tr key={appointment.id} className="border-t border-slate-200 hover:bg-slate-100">
+                <td className="px-3 py-2.5 text-slate-900 font-medium">{appointment.name}</td>
+                <td className="px-3 py-2.5 text-slate-600">{appointment.date}</td>
+                <td className="px-3 py-2.5 text-slate-600">{appointment.time}</td>
+                <td className="px-3 py-2.5 text-slate-600">{appointment.number}</td>
+                <td className="px-3 py-2.5 text-slate-600">{appointment.gender}</td>
+                <td className="px-3 py-2.5 text-slate-600">{appointment.age}</td>
+                <td className="px-3 py-2.5 text-slate-600">{appointment.specialty}</td>
+                <td className="px-3 py-2.5">
+                  <span className={`font-medium ${statusTextColor[appointment.status]}`}>
+                    {appointment.status}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => onView(appointment)}
+                      className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
+                    >
+                      View
+                    </button>
+                    <button
+                      onClick={() => onEdit(appointment)}
+                      className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
-      setNewPatient({ name: "", age: "", gender: "", contact: "", reason: "" });
-    },
-    [newPatient, patientEditId]
-  );
+export default function ReceptionistDashboard() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const [tab, setTab] = useState('overview')
 
-  const saveAppointmentBooking = useCallback(
-    (event) => {
-      event.preventDefault();
-      if (!newAppointment.patientName || !newAppointment.doctor || !newAppointment.date) {
-        return;
-      }
+  const [patients, setPatients] = useState(initialPatients)
+  const [appointments, setAppointments] = useState(initialAppointments)
 
-      if (appointmentEditId) {
-        setAppointmentBookings((prev) =>
-          prev.map((booking) =>
-            booking.id === appointmentEditId
-              ? {
-                  ...booking,
-                  patientName: newAppointment.patientName.trim(),
-                  doctor: newAppointment.doctor.trim(),
-                  date: newAppointment.date,
-                  time: newAppointment.time || "09:00",
-                  status: newAppointment.status,
-                }
-              : booking
-          )
-        );
-        setAppointmentEditId(null);
-      } else {
-        setAppointmentBookings((prev) => [
-          ...prev,
-          {
-            id: prev.length + 1,
-            patientName: newAppointment.patientName.trim(),
-            doctor: newAppointment.doctor.trim(),
-            date: newAppointment.date,
-            time: newAppointment.time || "09:00",
-            status: newAppointment.status,
-          },
-        ]);
-      }
+  const [viewingPatient, setViewingPatient] = useState(null)
+  const [viewingAppointment, setViewingAppointment] = useState(null)
 
-      setNewAppointment({ patientName: "", doctor: "", date: "", time: "", status: "Pending" });
-    },
-    [newAppointment, appointmentEditId]
-  );
+  const [patientModalOpen, setPatientModalOpen] = useState(false)
+  const [editingPatientId, setEditingPatientId] = useState(null)
+  const [patientForm, setPatientForm] = useState(emptyPatientForm)
+  const [patientContactError, setPatientContactError] = useState('')
 
-  const editPatientRecord = useCallback((patient) => {
-    setNewPatient({
+  const [appointmentModalOpen, setAppointmentModalOpen] = useState(false)
+  const [editingAppointmentId, setEditingAppointmentId] = useState(null)
+  const [appointmentForm, setAppointmentForm] = useState(emptyAppointmentForm)
+  const [appointmentContactError, setAppointmentContactError] = useState('')
+
+  function handleLogout() {
+    logout()
+    navigate('/login')
+  }
+
+  function openAddPatient() {
+    setEditingPatientId(null)
+    setPatientForm(emptyPatientForm)
+    setPatientContactError('')
+    setPatientModalOpen(true)
+  }
+
+  function openEditPatient(patient) {
+    setEditingPatientId(patient.id)
+    setPatientForm({
       name: patient.name,
-      age: patient.age === "N/A" ? "" : patient.age,
-      gender: patient.gender === "Unspecified" ? "" : patient.gender,
+      date: patient.date,
+      gender: patient.gender,
       contact: patient.contact,
-      reason: patient.reason,
-    });
-    setPatientEditId(patient.id);
-  }, []);
+      age: patient.age,
+    })
+    setPatientContactError('')
+    setPatientModalOpen(true)
+  }
 
-  const deletePatientRecord = useCallback((id) => {
-    setPatientRecords((prev) => prev.filter((patient) => patient.id !== id));
-    if (patientEditId === id) {
-      setPatientEditId(null);
-      setNewPatient({ name: "", age: "", gender: "", contact: "", reason: "" });
+  function handlePatientFormChange(e) {
+    const { name, value } = e.target
+    setPatientForm((prev) => ({ ...prev, [name]: value }))
+    if (name === 'contact') setPatientContactError('')
+  }
+
+  function savePatient(e) {
+    e.preventDefault()
+    if (countDigits(patientForm.contact) > 10) {
+      setPatientContactError('Phone number cannot be more than 10 digits')
+      return
     }
-  }, [patientEditId]);
-
-  const editAppointmentBooking = useCallback((booking) => {
-    setNewAppointment({
-      patientName: booking.patientName,
-      doctor: booking.doctor,
-      date: booking.date,
-      time: booking.time,
-      status: booking.status,
-    });
-    setAppointmentEditId(booking.id);
-  }, []);
-
-  const deleteAppointmentBooking = useCallback((id) => {
-    setAppointmentBookings((prev) => prev.filter((booking) => booking.id !== id));
-    if (appointmentEditId === id) {
-      setAppointmentEditId(null);
-      setNewAppointment({ patientName: "", doctor: "", date: "", time: "", status: "Pending" });
+    if (editingPatientId) {
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === editingPatientId
+            ? { ...patientForm, id: editingPatientId, age: Number(patientForm.age) }
+            : patient
+        )
+      )
+    } else {
+      setPatients((prev) => [
+        ...prev,
+        { ...patientForm, id: generateId(), age: Number(patientForm.age) },
+      ])
     }
-  }, [appointmentEditId]);
+    setPatientModalOpen(false)
+  }
 
-  const tableStyles = {
-    width: "100%",
-    borderCollapse: "collapse",
-    marginTop: "12px",
-  };
+  function openAddAppointment() {
+    setEditingAppointmentId(null)
+    setAppointmentForm(emptyAppointmentForm)
+    setAppointmentContactError('')
+    setAppointmentModalOpen(true)
+  }
 
-  const headerCellStyles = {
-    borderBottom: "2px solid #ccc",
-    textAlign: "left",
-    padding: "10px 8px",
-    background: "#f4f6fb",
-  };
+  function openEditAppointment(appointment) {
+    setEditingAppointmentId(appointment.id)
+    setAppointmentForm({
+      name: appointment.name,
+      date: appointment.date,
+      time: appointment.time,
+      number: appointment.number,
+      gender: appointment.gender,
+      age: appointment.age,
+      specialty: appointment.specialty,
+    })
+    setAppointmentContactError('')
+    setAppointmentModalOpen(true)
+  }
 
-  const cellStyles = {
-    borderBottom: "1px solid #e3e6ef",
-    padding: "10px 8px",
-  };
+  function handleAppointmentFormChange(e) {
+    const { name, value } = e.target
+    setAppointmentForm((prev) => ({ ...prev, [name]: value }))
+    if (name === 'number') setAppointmentContactError('')
+  }
 
-  const sectionStyles = {
-    marginBottom: "32px",
-    padding: "20px",
-    background: "#fff",
-    borderRadius: "10px",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-  };
+  function saveAppointment(e) {
+    e.preventDefault()
+    if (countDigits(appointmentForm.number) > 10) {
+      setAppointmentContactError('Phone number cannot be more than 10 digits')
+      return
+    }
+    if (editingAppointmentId) {
+      setAppointments((prev) =>
+        prev.map((appointment) =>
+          appointment.id === editingAppointmentId
+            ? { ...appointment, ...appointmentForm, age: Number(appointmentForm.age) }
+            : appointment
+        )
+      )
+    } else {
+      setAppointments((prev) => [
+        ...prev,
+        {
+          ...appointmentForm,
+          id: generateId(),
+          age: Number(appointmentForm.age),
+          status: 'Pending',
+        },
+      ])
+    }
+    setAppointmentModalOpen(false)
+  }
 
-  const formRowStyles = {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: "12px",
-    marginTop: "12px",
-  };
-
-  const inputStyles = {
-    padding: "10px 12px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
-    width: "100%",
-    fontSize: "0.95rem",
-  };
-
-  const buttonStyles = {
-    padding: "10px 18px",
-    borderRadius: "8px",
-    border: "none",
-    background: "#2563eb",
-    color: "#fff",
-    cursor: "pointer",
-    marginTop: "14px",
-  };
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
 
   return (
-    <div style={{ padding: "24px", minHeight: "100vh", background: "#f0f4ff" }}>
-      <header style={{ marginBottom: "24px" }}>
-        <h1 style={{ margin: 0, fontSize: "2rem", color: "#111827" }}>Receptionist Dashboard</h1>
-        <p style={{ marginTop: "8px", color: "#4b5563" }}>
-          Manage patient records and appointment bookings in one place.
-        </p>
-      </header>
+    <div className="min-h-screen flex bg-blue-300">
+      <Sidebar
+        navItems={navItems}
+        activeKey={tab}
+        onSelect={setTab}
+        user={user}
+        onLogout={handleLogout}
+      />
 
-      <div style={{ display: "grid", gap: "20px", marginBottom: "24px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        <div style={{ ...sectionStyles }}>
-          <h2 style={{ margin: 0, fontSize: "1.1rem", color: "#111827" }}>Total Patients</h2>
-          <p style={{ fontSize: "2rem", margin: "12px 0 0", color: "#2563eb" }}>{totalPatients}</p>
-        </div>
-        <div style={{ ...sectionStyles }}>
-          <h2 style={{ margin: 0, fontSize: "1.1rem", color: "#111827" }}>Upcoming Appointments</h2>
-          <p style={{ fontSize: "2rem", margin: "12px 0 0", color: "#2563eb" }}>{upcomingAppointments.length}</p>
-        </div>
-      </div>
+      <main className="flex-1 min-w-0 px-8 py-8">
+        {tab === 'overview' && (
+          <>
+            <h1 className="text-xl font-semibold text-slate-900">Overview</h1>
+            <p className="text-sm text-slate-500 mt-0.5">{today}</p>
 
-      <div style={{ display: "grid", gap: "24px" }}>
-        <section style={sectionStyles}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="border border-slate-200 bg-white px-6 py-5">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total patients</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{patients.length}</p>
+              </div>
+              <div className="border border-slate-200 bg-white px-6 py-5">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total appointments</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{appointments.length}</p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab === 'patients' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-semibold text-slate-900">Patients</h1>
+                <p className="text-sm text-slate-500 mt-0.5">{today}</p>
+              </div>
+              <button
+                onClick={openAddPatient}
+                className="rounded bg-brand-accent px-4 py-2 text-sm font-medium text-white hover:bg-brand-accent-dark"
+              >
+                Add Patient
+              </button>
+            </div>
+            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
+              <PatientsTable rows={patients} onView={setViewingPatient} onEdit={openEditPatient} />
+            </div>
+          </>
+        )}
+
+        {tab === 'appointments' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-semibold text-slate-900">Book Appointments</h1>
+                <p className="text-sm text-slate-500 mt-0.5">{today}</p>
+              </div>
+              <button
+                onClick={openAddAppointment}
+                className="rounded bg-brand-accent px-4 py-2 text-sm font-medium text-white hover:bg-brand-accent-dark"
+              >
+                Add Appointment
+              </button>
+            </div>
+            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
+              <AppointmentsTable
+                rows={appointments}
+                onView={setViewingAppointment}
+                onEdit={openEditAppointment}
+              />
+            </div>
+          </>
+        )}
+      </main>
+
+      <Modal
+        open={!!viewingPatient}
+        onClose={() => setViewingPatient(null)}
+        title={viewingPatient ? `${viewingPatient.name}: Patient details` : ''}
+        maxWidthClass="max-w-3xl"
+      >
+        {viewingPatient && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 text-base">
             <div>
-              <h2 style={{ margin: 0, fontSize: "1.25rem", color: "#111827" }}>Patient Records</h2>
-              <p style={{ margin: "8px 0 0", color: "#4b5563" }}>
-                Add and review patient information.
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">ID</p>
+              <p className="mt-1 text-slate-900">{viewingPatient.id}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Date</p>
+              <p className="mt-1 text-slate-900">{viewingPatient.date}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Age / Gender</p>
+              <p className="mt-1 text-slate-900">
+                {viewingPatient.age} / {viewingPatient.gender}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Contact</p>
+              <p className="mt-1 text-slate-900">{viewingPatient.contact || 'N/A'}</p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!viewingAppointment}
+        onClose={() => setViewingAppointment(null)}
+        title={viewingAppointment ? `${viewingAppointment.name}: Appointment details` : ''}
+        maxWidthClass="max-w-3xl"
+      >
+        {viewingAppointment && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 text-base">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Specialty</p>
+              <p className="mt-1 text-slate-900">{viewingAppointment.specialty}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Date &amp; time</p>
+              <p className="mt-1 text-slate-900">
+                {viewingAppointment.date}, {viewingAppointment.time}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Age / Gender</p>
+              <p className="mt-1 text-slate-900">
+                {viewingAppointment.age} / {viewingAppointment.gender}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Contact</p>
+              <p className="mt-1 text-slate-900">{viewingAppointment.number}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Status</p>
+              <p className={`mt-1 font-medium ${statusTextColor[viewingAppointment.status]}`}>
+                {viewingAppointment.status}
               </p>
             </div>
           </div>
+        )}
+      </Modal>
 
-          <form onSubmit={savePatientRecord} style={formRowStyles}>
+      <Modal
+        open={patientModalOpen}
+        onClose={() => setPatientModalOpen(false)}
+        title={editingPatientId ? 'Edit Patient' : 'Add Patient'}
+      >
+        <form onSubmit={savePatient} className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-slate-700">Full name</label>
             <input
+              required
+              type="text"
               name="name"
-              placeholder="Patient name"
-              value={newPatient.name}
-              onChange={handlePatientChange}
-              style={inputStyles}
+              value={patientForm.name}
+              onChange={handlePatientFormChange}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
             />
-            <input
-              name="age"
-              type="number"
-              placeholder="Age"
-              value={newPatient.age}
-              onChange={handlePatientChange}
-              style={inputStyles}
-            />
-            <select name="gender" value={newPatient.gender} onChange={handlePatientChange} style={inputStyles}>
-              <option value="">Gender</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
-            <input
-              name="contact"
-              placeholder="Contact number"
-              value={newPatient.contact}
-              onChange={handlePatientChange}
-              style={inputStyles}
-            />
-            <input
-              name="reason"
-              placeholder="Visit reason"
-              value={newPatient.reason}
-              onChange={handlePatientChange}
-              style={inputStyles}
-            />
-            <button type="submit" style={buttonStyles}>
-              {patientEditId ? "Save Patient" : "Add Patient"}
-            </button>
-          </form>
-
-          <table style={tableStyles}>
-            <thead>
-              <tr>
-                <th style={headerCellStyles}>ID</th>
-                <th style={headerCellStyles}>Name</th>
-                <th style={headerCellStyles}>Age</th>
-                <th style={headerCellStyles}>Gender</th>
-                <th style={headerCellStyles}>Contact</th>
-                <th style={headerCellStyles}>Reason</th>
-                <th style={headerCellStyles}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {patientRecords.map((patient) => (
-                <tr key={patient.id}>
-                  <td style={cellStyles}>{patient.id}</td>
-                  <td style={cellStyles}>{patient.name}</td>
-                  <td style={cellStyles}>{patient.age}</td>
-                  <td style={cellStyles}>{patient.gender}</td>
-                  <td style={cellStyles}>{patient.contact}</td>
-                  <td style={cellStyles}>{patient.reason}</td>
-                  <td style={cellStyles}>
-                    <button type="button" onClick={() => editPatientRecord(patient)} style={{ ...buttonStyles, background: "#0f766e", marginRight: "8px" }}>
-                      Edit
-                    </button>
-                    <button type="button" onClick={() => deletePatientRecord(patient.id)} style={{ ...buttonStyles, background: "#ef4444" }}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        <section style={sectionStyles}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <h2 style={{ margin: 0, fontSize: "1.25rem", color: "#111827" }}>Appointment Bookings</h2>
-              <p style={{ margin: "8px 0 0", color: "#4b5563" }}>
-                Schedule and view upcoming appointments.
-              </p>
+              <label className="text-sm font-medium text-slate-700">Registration date</label>
+              <input
+                required
+                type="date"
+                name="date"
+                value={patientForm.date}
+                onChange={handlePatientFormChange}
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Age</label>
+              <input
+                required
+                type="number"
+                min="0"
+                name="age"
+                value={patientForm.age}
+                onChange={handlePatientFormChange}
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Gender</label>
+              <select
+                name="gender"
+                value={patientForm.gender}
+                onChange={handlePatientFormChange}
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              >
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Contact</label>
+              <input
+                required
+                type="text"
+                name="contact"
+                value={patientForm.contact}
+                onChange={handlePatientFormChange}
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              />
+              {patientContactError && (
+                <p className="mt-1 text-xs text-red-600">{patientContactError}</p>
+              )}
+            </div>
+          </div>
+          <button
+            type="submit"
+            className="w-full rounded bg-brand-accent py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark"
+          >
+            {editingPatientId ? 'Update patient' : 'Save patient'}
+          </button>
+        </form>
+      </Modal>
 
-          <form onSubmit={saveAppointmentBooking} style={formRowStyles}>
+      <Modal
+        open={appointmentModalOpen}
+        onClose={() => setAppointmentModalOpen(false)}
+        title={editingAppointmentId ? 'Edit Appointment' : 'Add Appointment'}
+      >
+        <form onSubmit={saveAppointment} className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-slate-700">Patient name</label>
             <input
-              name="patientName"
-              placeholder="Patient name"
-              value={newAppointment.patientName}
-              onChange={handleAppointmentChange}
-              style={inputStyles}
+              required
+              type="text"
+              name="name"
+              value={appointmentForm.name}
+              onChange={handleAppointmentFormChange}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
             />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Date</label>
+              <input
+                required
+                type="date"
+                name="date"
+                value={appointmentForm.date}
+                onChange={handleAppointmentFormChange}
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Time</label>
+              <input
+                required
+                type="time"
+                name="time"
+                value={appointmentForm.time}
+                onChange={handleAppointmentFormChange}
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Age</label>
+              <input
+                required
+                type="number"
+                min="0"
+                name="age"
+                value={appointmentForm.age}
+                onChange={handleAppointmentFormChange}
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Gender</label>
+              <select
+                name="gender"
+                value={appointmentForm.gender}
+                onChange={handleAppointmentFormChange}
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              >
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate-700">Contact</label>
             <input
-              name="doctor"
-              placeholder="Doctor name"
-              value={newAppointment.doctor}
-              onChange={handleAppointmentChange}
-              style={inputStyles}
+              required
+              type="text"
+              name="number"
+              value={appointmentForm.number}
+              onChange={handleAppointmentFormChange}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
             />
-            <input
-              name="date"
-              type="date"
-              value={newAppointment.date}
-              onChange={handleAppointmentChange}
-              style={inputStyles}
-            />
-            <input
-              name="time"
-              type="time"
-              value={newAppointment.time}
-              onChange={handleAppointmentChange}
-              style={inputStyles}
-            />
-            <select name="status" value={newAppointment.status} onChange={handleAppointmentChange} style={inputStyles}>
-              <option value="Pending">Pending</option>
-              <option value="Confirmed">Confirmed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-            <button type="submit" style={buttonStyles}>
-              {appointmentEditId ? "Save Appointment" : "Book Appointment"}
-            </button>
-          </form>
-
-          <table style={tableStyles}>
-            <thead>
-              <tr>
-                <th style={headerCellStyles}>ID</th>
-                <th style={headerCellStyles}>Patient</th>
-                <th style={headerCellStyles}>Doctor</th>
-                <th style={headerCellStyles}>Date</th>
-                <th style={headerCellStyles}>Time</th>
-                <th style={headerCellStyles}>Status</th>
-                <th style={headerCellStyles}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appointmentBookings.map((booking) => (
-                <tr key={booking.id}>
-                  <td style={cellStyles}>{booking.id}</td>
-                  <td style={cellStyles}>{booking.patientName}</td>
-                  <td style={cellStyles}>{booking.doctor}</td>
-                  <td style={cellStyles}>{booking.date}</td>
-                  <td style={cellStyles}>{booking.time}</td>
-                  <td style={cellStyles}>{booking.status}</td>
-                  <td style={cellStyles}>
-                    <button type="button" onClick={() => editAppointmentBooking(booking)} style={{ ...buttonStyles, background: "#0f766e", marginRight: "8px" }}>
-                      Edit
-                    </button>
-                    <button type="button" onClick={() => deleteAppointmentBooking(booking.id)} style={{ ...buttonStyles, background: "#ef4444" }}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
+            {appointmentContactError && (
+              <p className="mt-1 text-xs text-red-600">{appointmentContactError}</p>
+            )}
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate-700">Specialty</label>
+            <select
+              name="specialty"
+              value={appointmentForm.specialty}
+              onChange={handleAppointmentFormChange}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+            >
+              {specialties.map((specialty) => (
+                <option key={specialty} value={specialty}>
+                  {specialty}
+                </option>
               ))}
-            </tbody>
-          </table>
-        </section>
-      </div>
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="w-full rounded bg-brand-accent py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark"
+          >
+            {editingAppointmentId ? 'Update appointment' : 'Save appointment'}
+          </button>
+        </form>
+      </Modal>
     </div>
-  );
-};
-
-export default ReceptionistDashboard;
+  )
+}
