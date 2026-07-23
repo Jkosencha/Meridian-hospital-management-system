@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createColumnHelper } from '@tanstack/react-table'
 import { useAuth } from '../context/AuthContext'
 import Sidebar from '../components/Sidebar'
 import Modal from '../components/Modal'
+import DataTable from '../components/DataTable'
 import { initialAppointments, statusOptions } from '../data/appointments'
 
 const navItems = [
@@ -32,60 +34,44 @@ function StatusSelect({ appointment, onChange }) {
   )
 }
 
-function AppointmentsTable({ rows, onStatusChange, onView, onPrescribe }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs whitespace-nowrap">
-        <thead>
-          <tr className="text-left uppercase tracking-wide text-slate-500 bg-slate-100">
-            <th className="px-3 py-2.5 font-medium">Name</th>
-            <th className="px-3 py-2.5 font-medium">Date</th>
-            <th className="px-3 py-2.5 font-medium">Time</th>
-            <th className="px-3 py-2.5 font-medium">National ID</th>
-            <th className="px-3 py-2.5 font-medium">Contact</th>
-            <th className="px-3 py-2.5 font-medium">Gender</th>
-            <th className="px-3 py-2.5 font-medium">Age</th>
-            <th className="px-3 py-2.5 font-medium">Specialty</th>
-            <th className="px-3 py-2.5 font-medium">Status</th>
-            <th className="px-3 py-2.5 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((appointment) => (
-            <tr key={appointment.id} className="border-t border-slate-200 hover:bg-slate-100">
-              <td className="px-3 py-2.5 text-slate-900 font-medium">{appointment.name}</td>
-              <td className="px-3 py-2.5 text-slate-600">{appointment.date}</td>
-              <td className="px-3 py-2.5 text-slate-600">{appointment.time}</td>
-              <td className="px-3 py-2.5 text-slate-600">{appointment.id}</td>
-              <td className="px-3 py-2.5 text-slate-600">{appointment.number}</td>
-              <td className="px-3 py-2.5 text-slate-600">{appointment.gender}</td>
-              <td className="px-3 py-2.5 text-slate-600">{appointment.age}</td>
-              <td className="px-3 py-2.5 text-slate-600">{appointment.specialty}</td>
-              <td className="px-3 py-2.5">
-                <StatusSelect appointment={appointment} onChange={onStatusChange} />
-              </td>
-              <td className="px-3 py-2.5">
-                <div className="flex flex-col gap-1 items-stretch">
-                  <button
-                    onClick={() => onView(appointment)}
-                    className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
-                  >
-                    View
-                  </button>
-                  <button
-                    onClick={() => onPrescribe(appointment)}
-                    className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
-                  >
-                    Prescribe
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
+const columnHelper = createColumnHelper()
+
+function buildAppointmentColumns({ onStatusChange, onView, onPrescribe }) {
+  return [
+    columnHelper.accessor('name', { header: 'Name', meta: { className: 'text-slate-900 font-medium' } }),
+    columnHelper.accessor('date', { header: 'Date' }),
+    columnHelper.accessor('time', { header: 'Time' }),
+    columnHelper.accessor('id', { header: 'National ID', enableSorting: false }),
+    columnHelper.accessor('number', { header: 'Contact', enableSorting: false }),
+    columnHelper.accessor('gender', { header: 'Gender' }),
+    columnHelper.accessor('age', { header: 'Age' }),
+    columnHelper.accessor('specialty', { header: 'Specialty' }),
+    columnHelper.display({
+      id: 'status',
+      header: 'Status',
+      cell: ({ row }) => <StatusSelect appointment={row.original} onChange={onStatusChange} />,
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => (
+        <div className="flex flex-col gap-1 items-stretch">
+          <button
+            onClick={() => onView(row.original)}
+            className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
+          >
+            View
+          </button>
+          <button
+            onClick={() => onPrescribe(row.original)}
+            className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
+          >
+            Prescribe
+          </button>
+        </div>
+      ),
+    }),
+  ]
 }
 
 const emptyPrescription = { diagnosis: '', notes: '', prescription: '' }
@@ -133,6 +119,12 @@ export default function DoctorDashboard() {
 
   const pendingCount = appointments.filter((appt) => appt.status === 'Pending').length
 
+  const appointmentColumns = buildAppointmentColumns({
+    onStatusChange: handleStatusChange,
+    onView: setViewingAppointment,
+    onPrescribe: openPrescribe,
+  })
+
   return (
     <div className="min-h-screen flex bg-blue-300">
       <Sidebar
@@ -164,11 +156,10 @@ export default function DoctorDashboard() {
               <div className="px-4 py-3 border-b border-slate-200">
                 <h2 className="text-sm font-medium text-slate-900">Next up</h2>
               </div>
-              <AppointmentsTable
-                rows={appointments.slice(0, 3)}
-                onStatusChange={handleStatusChange}
-                onView={setViewingAppointment}
-                onPrescribe={openPrescribe}
+              <DataTable
+                columns={appointmentColumns}
+                data={appointments.slice(0, 3)}
+                emptyMessage="No appointments today"
               />
             </div>
           </>
@@ -179,11 +170,12 @@ export default function DoctorDashboard() {
             <h1 className="text-xl font-semibold text-slate-900">Appointments</h1>
             <p className="text-sm text-slate-500 mt-0.5">{today}</p>
             <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
-              <AppointmentsTable
-                rows={appointments}
-                onStatusChange={handleStatusChange}
-                onView={setViewingAppointment}
-                onPrescribe={openPrescribe}
+              <DataTable
+                columns={appointmentColumns}
+                data={appointments}
+                emptyMessage="No appointments booked"
+                searchable
+                searchPlaceholder="Search appointments..."
               />
             </div>
           </>
