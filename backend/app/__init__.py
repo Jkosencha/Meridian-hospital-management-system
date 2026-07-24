@@ -18,5 +18,8 @@ def create_app(config_class=Config):
     CORS(app)
 
     from app import models  # noqa: F401 - ensures models are registered before migrations
+    from app.routes import api
+
+    app.register_blueprint(api)
 
     return app
