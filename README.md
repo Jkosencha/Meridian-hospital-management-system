@@ -1,13 +1,9 @@
 # Meridian Hospital Management System
 
-A role-based hospital management system frontend built with React, Vite, and Tailwind CSS.
+A role-based hospital management system with a React frontend and a Flask + SQLite backend. Each role (doctor, receptionist, nurse, pharmacy, admin) gets its own dashboard for the parts of the patient workflow it owns.
 
 ## Tech Stack
 
-- React + Vite
-- Tailwind CSS
-- React Router
+**Frontend:** React, Vite, Tailwind CSS, React Router, TanStack Table, shadcn/Radix UI primitives
 
-## Demo Login
-
-This project currently uses mock data, no backend yet. Sign in with one of these demo accounts:
+**Backend:** Flask, SQLAlchemy, Flask-Migrate (Alembic), SQLite, Flask-CORS
