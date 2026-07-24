@@ -1,8 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createColumnHelper } from '@tanstack/react-table'
 import { useAuth } from '../context/AuthContext'
 import Sidebar from '../components/Sidebar'
 import Modal from '../components/Modal'
+import DataTable from '../components/DataTable'
+import {
+  getPatients,
+  createPatient,
+  updatePatient,
+  getAppointments,
+  createAppointment,
+  updateAppointment,
+} from '../lib/api'
+import { specialties } from '../data/specialties'
+import { countDigits } from '../lib/validators'
 
 const navItems = [
   { key: 'overview', label: 'Overview' },
@@ -10,140 +22,48 @@ const navItems = [
   { key: 'appointments', label: 'Book Appointments' },
 ]
 
-const specialties = [
-  'General Practitioner',
-  'Cardiologist',
-  'Gynecologist',
-  'Dentist',
-  'Endocrinologist',
-  'Pediatrician',
-]
-
-const initialPatients = [
-  {
-    id: '4763462',
-    name: 'Leo Thuku',
-    date: '2026-07-08',
-    gender: 'Male',
-    contact: '+254700000001',
-    age: 20,
-  },
-  {
-    id: '7346473',
-    name: 'Daniel Brooks',
-    date: '2026-07-09',
-    gender: 'Male',
-    contact: '+254700000002',
-    age: 35,
-  },
-  {
-    id: '3764522',
-    name: 'Sarah Kim',
-    date: '2026-07-10',
-    gender: 'Female',
-    contact: '+254700000003',
-    age: 41,
-  },
-]
-
-const initialAppointments = [
-  {
-    id: '23456789',
-    name: 'Wanjiru Kamau',
-    date: '2026-07-10',
-    time: '09:00 AM',
-    number: '+254 712 345 678',
-    gender: 'Female',
-    age: 34,
-    specialty: 'General Practitioner',
-    status: 'Pending',
-  },
-  {
-    id: '24567890',
-    name: 'Otieno Onyango',
-    date: '2026-07-10',
-    time: '09:45 AM',
-    number: '+254 723 456 789',
-    gender: 'Male',
-    age: 52,
-    specialty: 'Cardiologist',
-    status: 'Pending',
-  },
-]
-
-function generateId() {
-  return String(Math.floor(10000000 + Math.random() * 90000000))
-}
-
-function countDigits(value) {
-  return (value.match(/\d/g) || []).length
-}
-
 const emptyPatientForm = { name: '', date: '', gender: 'Male', contact: '', age: '' }
 const emptyAppointmentForm = {
   name: '',
   date: '',
   time: '',
   number: '',
-  gender: 'Male',
+  gender: 'female',
   age: '',
   specialty: specialties[0],
 }
 
-function PatientsTable({ rows, onView, onEdit }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs whitespace-nowrap">
-        <thead>
-          <tr className="text-left uppercase tracking-wide text-slate-500 bg-slate-100">
-            <th className="px-3 py-2.5 font-medium">Name</th>
-            <th className="px-3 py-2.5 font-medium">Date</th>
-            <th className="px-3 py-2.5 font-medium">ID</th>
-            <th className="px-3 py-2.5 font-medium">Gender</th>
-            <th className="px-3 py-2.5 font-medium">Contact</th>
-            <th className="px-3 py-2.5 font-medium">Age</th>
-            <th className="px-3 py-2.5 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan="7" className="px-3 py-6 text-center text-slate-500">
-                No patients available
-              </td>
-            </tr>
-          ) : (
-            rows.map((patient) => (
-              <tr key={patient.id} className="border-t border-slate-200 hover:bg-slate-100">
-                <td className="px-3 py-2.5 text-slate-900 font-medium">{patient.name}</td>
-                <td className="px-3 py-2.5 text-slate-600">{patient.date}</td>
-                <td className="px-3 py-2.5 text-slate-600">{patient.id}</td>
-                <td className="px-3 py-2.5 text-slate-600">{patient.gender}</td>
-                <td className="px-3 py-2.5 text-slate-600">{patient.contact}</td>
-                <td className="px-3 py-2.5 text-slate-600">{patient.age}</td>
-                <td className="px-3 py-2.5">
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => onView(patient)}
-                      className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => onEdit(patient)}
-                      className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
+const columnHelper = createColumnHelper()
+
+function buildPatientColumns({ onView, onEdit }) {
+  return [
+    columnHelper.accessor('name', { header: 'Name', meta: { className: 'text-slate-900 font-medium' } }),
+    columnHelper.accessor('date', { header: 'Date' }),
+    columnHelper.accessor('id', { header: 'ID', enableSorting: false }),
+    columnHelper.accessor('gender', { header: 'Gender' }),
+    columnHelper.accessor('contact', { header: 'Contact', enableSorting: false }),
+    columnHelper.accessor('age', { header: 'Age' }),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => (
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => onView(row.original)}
+            className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
+          >
+            View
+          </button>
+          <button
+            onClick={() => onEdit(row.original)}
+            className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
+          >
+            Edit
+          </button>
+        </div>
+      ),
+    }),
+  ]
 }
 
 const statusTextColor = {
@@ -152,68 +72,45 @@ const statusTextColor = {
   Cancelled: 'text-slate-500',
 }
 
-function AppointmentsTable({ rows, onView, onEdit }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs whitespace-nowrap">
-        <thead>
-          <tr className="text-left uppercase tracking-wide text-slate-500 bg-slate-100">
-            <th className="px-3 py-2.5 font-medium">Name</th>
-            <th className="px-3 py-2.5 font-medium">Date</th>
-            <th className="px-3 py-2.5 font-medium">Time</th>
-            <th className="px-3 py-2.5 font-medium">Contact</th>
-            <th className="px-3 py-2.5 font-medium">Gender</th>
-            <th className="px-3 py-2.5 font-medium">Age</th>
-            <th className="px-3 py-2.5 font-medium">Specialty</th>
-            <th className="px-3 py-2.5 font-medium">Status</th>
-            <th className="px-3 py-2.5 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan="9" className="px-3 py-6 text-center text-slate-500">
-                No appointments booked
-              </td>
-            </tr>
-          ) : (
-            rows.map((appointment) => (
-              <tr key={appointment.id} className="border-t border-slate-200 hover:bg-slate-100">
-                <td className="px-3 py-2.5 text-slate-900 font-medium">{appointment.name}</td>
-                <td className="px-3 py-2.5 text-slate-600">{appointment.date}</td>
-                <td className="px-3 py-2.5 text-slate-600">{appointment.time}</td>
-                <td className="px-3 py-2.5 text-slate-600">{appointment.number}</td>
-                <td className="px-3 py-2.5 text-slate-600">{appointment.gender}</td>
-                <td className="px-3 py-2.5 text-slate-600">{appointment.age}</td>
-                <td className="px-3 py-2.5 text-slate-600">{appointment.specialty}</td>
-                <td className="px-3 py-2.5">
-                  <span className={`font-medium ${statusTextColor[appointment.status]}`}>
-                    {appointment.status}
-                  </span>
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => onView(appointment)}
-                      className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => onEdit(appointment)}
-                      className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
+function buildAppointmentColumns({ onView, onEdit }) {
+  return [
+    columnHelper.accessor('name', { header: 'Name', meta: { className: 'text-slate-900 font-medium' } }),
+    columnHelper.accessor('date', { header: 'Date' }),
+    columnHelper.accessor('time', { header: 'Time' }),
+    columnHelper.accessor('number', { header: 'Contact', enableSorting: false }),
+    columnHelper.accessor('gender', { header: 'Gender' }),
+    columnHelper.accessor('age', { header: 'Age' }),
+    columnHelper.accessor('specialty', { header: 'Specialty' }),
+    columnHelper.display({
+      id: 'status',
+      header: 'Status',
+      cell: ({ row }) => (
+        <span className={`font-medium ${statusTextColor[row.original.status]}`}>
+          {row.original.status}
+        </span>
+      ),
+    }),
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => (
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => onView(row.original)}
+            className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
+          >
+            View
+          </button>
+          <button
+            onClick={() => onEdit(row.original)}
+            className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
+          >
+            Edit
+          </button>
+        </div>
+      ),
+    }),
+  ]
 }
 
 export default function ReceptionistDashboard() {
@@ -221,8 +118,9 @@ export default function ReceptionistDashboard() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('overview')
 
-  const [patients, setPatients] = useState(initialPatients)
-  const [appointments, setAppointments] = useState(initialAppointments)
+  const [patients, setPatients] = useState([])
+  const [appointments, setAppointments] = useState([])
+  const [loadError, setLoadError] = useState('')
 
   const [viewingPatient, setViewingPatient] = useState(null)
   const [viewingAppointment, setViewingAppointment] = useState(null)
@@ -236,6 +134,15 @@ export default function ReceptionistDashboard() {
   const [editingAppointmentId, setEditingAppointmentId] = useState(null)
   const [appointmentForm, setAppointmentForm] = useState(emptyAppointmentForm)
   const [appointmentContactError, setAppointmentContactError] = useState('')
+
+  useEffect(() => {
+    Promise.all([getPatients(), getAppointments()])
+      .then(([patientData, appointmentData]) => {
+        setPatients(patientData)
+        setAppointments(appointmentData)
+      })
+      .catch(() => setLoadError('Could not load data from the server.'))
+  }, [])
 
   function handleLogout() {
     logout()
@@ -268,27 +175,27 @@ export default function ReceptionistDashboard() {
     if (name === 'contact') setPatientContactError('')
   }
 
-  function savePatient(e) {
+  async function savePatient(e) {
     e.preventDefault()
     if (countDigits(patientForm.contact) > 10) {
       setPatientContactError('Phone number cannot be more than 10 digits')
       return
     }
-    if (editingPatientId) {
-      setPatients((prev) =>
-        prev.map((patient) =>
-          patient.id === editingPatientId
-            ? { ...patientForm, id: editingPatientId, age: Number(patientForm.age) }
-            : patient
+    const payload = { ...patientForm, age: Number(patientForm.age) }
+    try {
+      if (editingPatientId) {
+        const updated = await updatePatient(editingPatientId, payload)
+        setPatients((prev) =>
+          prev.map((patient) => (patient.id === editingPatientId ? updated : patient))
         )
-      )
-    } else {
-      setPatients((prev) => [
-        ...prev,
-        { ...patientForm, id: generateId(), age: Number(patientForm.age) },
-      ])
+      } else {
+        const created = await createPatient(payload)
+        setPatients((prev) => [...prev, created])
+      }
+      setPatientModalOpen(false)
+    } catch (err) {
+      setPatientContactError(err.message || 'Could not save patient. Please try again.')
     }
-    setPatientModalOpen(false)
   }
 
   function openAddAppointment() {
@@ -319,38 +226,44 @@ export default function ReceptionistDashboard() {
     if (name === 'number') setAppointmentContactError('')
   }
 
-  function saveAppointment(e) {
+  async function saveAppointment(e) {
     e.preventDefault()
     if (countDigits(appointmentForm.number) > 10) {
       setAppointmentContactError('Phone number cannot be more than 10 digits')
       return
     }
-    if (editingAppointmentId) {
-      setAppointments((prev) =>
-        prev.map((appointment) =>
-          appointment.id === editingAppointmentId
-            ? { ...appointment, ...appointmentForm, age: Number(appointmentForm.age) }
-            : appointment
+    const payload = { ...appointmentForm, age: Number(appointmentForm.age) }
+    try {
+      if (editingAppointmentId) {
+        const updated = await updateAppointment(editingAppointmentId, {
+          ...payload,
+          status: appointments.find((a) => a.id === editingAppointmentId)?.status,
+        })
+        setAppointments((prev) =>
+          prev.map((appointment) =>
+            appointment.id === editingAppointmentId ? updated : appointment
+          )
         )
-      )
-    } else {
-      setAppointments((prev) => [
-        ...prev,
-        {
-          ...appointmentForm,
-          id: generateId(),
-          age: Number(appointmentForm.age),
-          status: 'Pending',
-        },
-      ])
+      } else {
+        const created = await createAppointment(payload)
+        setAppointments((prev) => [...prev, created])
+      }
+      setAppointmentModalOpen(false)
+    } catch (err) {
+      setAppointmentContactError(err.message || 'Could not save appointment. Please try again.')
     }
-    setAppointmentModalOpen(false)
   }
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
+  })
+
+  const patientColumns = buildPatientColumns({ onView: setViewingPatient, onEdit: openEditPatient })
+  const appointmentColumns = buildAppointmentColumns({
+    onView: setViewingAppointment,
+    onEdit: openEditAppointment,
   })
 
   return (
@@ -364,6 +277,11 @@ export default function ReceptionistDashboard() {
       />
 
       <main className="flex-1 min-w-0 px-8 py-8">
+        {loadError && (
+          <div className="mb-6 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+            {loadError}
+          </div>
+        )}
         {tab === 'overview' && (
           <>
             <h1 className="text-xl font-semibold text-slate-900">Overview</h1>
@@ -396,8 +314,14 @@ export default function ReceptionistDashboard() {
                 Add Patient
               </button>
             </div>
-            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
-              <PatientsTable rows={patients} onView={setViewingPatient} onEdit={openEditPatient} />
+            <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
+              <DataTable
+                columns={patientColumns}
+                data={patients}
+                emptyMessage="No patients available"
+                searchable
+                searchPlaceholder="Search patients..."
+              />
             </div>
           </>
         )}
@@ -416,11 +340,13 @@ export default function ReceptionistDashboard() {
                 Add Appointment
               </button>
             </div>
-            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
-              <AppointmentsTable
-                rows={appointments}
-                onView={setViewingAppointment}
-                onEdit={openEditAppointment}
+            <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
+              <DataTable
+                columns={appointmentColumns}
+                data={appointments}
+                emptyMessage="No appointments booked"
+                searchable
+                searchPlaceholder="Search appointments..."
               />
             </div>
           </>
