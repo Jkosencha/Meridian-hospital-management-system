@@ -4,6 +4,7 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import DoctorDashboard from './pages/DoctorDashboard'
 import ReceptionistDashboard from './pages/ReceptionistDashboard'
+import AdminDashboard from './pages/AdminDashboard'
 
 function Placeholder({ label }) {
   return <div className="p-10 text-xl text-slate-600">{label} dashboard, coming soon</div>
@@ -20,7 +21,7 @@ export default function App() {
           <Route path="/receptionist" element={<ReceptionistDashboard />} />
           <Route path="/nurse" element={<Placeholder label="Nurse" />} />
           <Route path="/pharmacy" element={<Placeholder label="Pharmacy" />} />
-          <Route path="/admin" element={<Placeholder label="Admin" />} />
+          <Route path="/admin" element={<AdminDashboard />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
