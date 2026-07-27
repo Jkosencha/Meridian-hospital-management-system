@@ -64,5 +64,6 @@ class Prescription(db.Model):
     diagnosis = db.Column(db.String(255))
     notes = db.Column(db.Text)
     prescription = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default="Pending")
 
     appointment = db.relationship("Appointment", back_populates="prescriptions")

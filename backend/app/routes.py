@@ -3,7 +3,7 @@ from datetime import date
 from flask import Blueprint, jsonify, request
 
 from app import db
-from app.models import Appointment, Patient
+from app.models import Appointment, Patient, Prescription, Triage
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -12,6 +12,12 @@ def parse_date(value):
     if not value:
         return None
     return date.fromisoformat(value)
+
+
+def normalize_gender(value, fallback=None):
+    if value is None:
+        return fallback
+    return "Female" if str(value).strip().lower() == "female" else "Male"
 
 
 def patient_to_dict(patient):
@@ -37,6 +43,37 @@ def has_conflicting_appointment(appt_date, time, specialty, exclude_id=None):
     return query.first() is not None
 
 
+def triage_to_dict(triage):
+    return {
+        "bloodPressure": triage.blood_pressure,
+        "temperature": triage.temperature,
+        "symptoms": triage.symptoms,
+        "notes": triage.notes,
+    }
+
+
+def prescription_to_dict(prescription):
+    return {
+        "id": str(prescription.id),
+        "diagnosis": prescription.diagnosis,
+        "notes": prescription.notes,
+        "prescription": prescription.prescription,
+        "status": prescription.status,
+    }
+
+
+def prescription_full_to_dict(prescription):
+    appointment = prescription.appointment
+    patient = appointment.patient
+    return {
+        **prescription_to_dict(prescription),
+        "appointmentId": str(appointment.id),
+        "name": patient.name,
+        "date": appointment.date.isoformat(),
+        "specialty": appointment.specialty,
+    }
+
+
 def appointment_to_dict(appointment):
     patient = appointment.patient
     return {
@@ -49,6 +86,8 @@ def appointment_to_dict(appointment):
         "age": patient.age,
         "specialty": appointment.specialty,
         "status": appointment.status,
+        "triage": triage_to_dict(appointment.triage) if appointment.triage else None,
+        "prescriptions": [prescription_to_dict(p) for p in appointment.prescriptions],
     }
 
 
@@ -64,7 +103,7 @@ def create_patient():
     patient = Patient(
         name=data.get("name"),
         phone_number=data.get("contact"),
-        gender=data.get("gender"),
+        gender=normalize_gender(data.get("gender"), "Male"),
         age=data.get("age"),
         registration_date=parse_date(data.get("date")),
     )
@@ -82,12 +121,28 @@ def update_patient(patient_id):
     data = request.get_json() or {}
     patient.name = data.get("name", patient.name)
     patient.phone_number = data.get("contact", patient.phone_number)
-    patient.gender = data.get("gender", patient.gender)
+    patient.gender = normalize_gender(data.get("gender"), patient.gender)
     patient.age = data.get("age", patient.age)
     if "date" in data:
         patient.registration_date = parse_date(data.get("date"))
     db.session.commit()
     return jsonify(patient_to_dict(patient))
+
+
+@api.delete("/patients/<int:patient_id>")
+def delete_patient(patient_id):
+    patient = db.session.get(Patient, patient_id)
+    if not patient:
+        return jsonify({"error": "Patient not found"}), 404
+
+    if Appointment.query.filter_by(patient_id=patient.id).first():
+        return jsonify(
+            {"error": "Cannot delete a patient with existing appointments. Delete their appointments first."}
+        ), 409
+
+    db.session.delete(patient)
+    db.session.commit()
+    return "", 204
 
 
 @api.get("/appointments")
@@ -106,23 +161,33 @@ def create_appointment():
             {"error": "This time slot is already booked for this specialty. Please choose a different time."}
         ), 409
 
-    patient = Patient.query.filter(
-        db.func.lower(Patient.name) == (data.get("name") or "").strip().lower(),
-        Patient.phone_number == data.get("number"),
-    ).first()
-    if not patient:
-        patient = Patient(
-            name=data.get("name"),
-            phone_number=data.get("number"),
-            gender=data.get("gender"),
-            age=data.get("age"),
-            registration_date=date.today(),
-        )
-        db.session.add(patient)
-        db.session.flush()
-    else:
-        patient.gender = data.get("gender", patient.gender)
+    patient_id = data.get("patientId")
+    if patient_id:
+        patient = db.session.get(Patient, patient_id)
+        if not patient:
+            return jsonify({"error": "Patient not found"}), 404
+        patient.name = data.get("name", patient.name)
+        patient.phone_number = data.get("number", patient.phone_number)
+        patient.gender = normalize_gender(data.get("gender"), patient.gender)
         patient.age = data.get("age", patient.age)
+    else:
+        patient = Patient.query.filter(
+            db.func.lower(Patient.name) == (data.get("name") or "").strip().lower(),
+            Patient.phone_number == data.get("number"),
+        ).first()
+        if not patient:
+            patient = Patient(
+                name=data.get("name"),
+                phone_number=data.get("number"),
+                gender=normalize_gender(data.get("gender"), "Male"),
+                age=data.get("age"),
+                registration_date=date.today(),
+            )
+            db.session.add(patient)
+            db.session.flush()
+        else:
+            patient.gender = normalize_gender(data.get("gender"), patient.gender)
+            patient.age = data.get("age", patient.age)
 
     appointment = Appointment(
         patient_id=patient.id,
@@ -155,7 +220,7 @@ def update_appointment(appointment_id):
     patient = appointment.patient
     patient.name = data.get("name", patient.name)
     patient.phone_number = data.get("number", patient.phone_number)
-    patient.gender = data.get("gender", patient.gender)
+    patient.gender = normalize_gender(data.get("gender"), patient.gender)
     patient.age = data.get("age", patient.age)
 
     appointment.date = new_date
@@ -165,3 +230,75 @@ def update_appointment(appointment_id):
 
     db.session.commit()
     return jsonify(appointment_to_dict(appointment))
+
+
+@api.delete("/appointments/<int:appointment_id>")
+def delete_appointment(appointment_id):
+    appointment = db.session.get(Appointment, appointment_id)
+    if not appointment:
+        return jsonify({"error": "Appointment not found"}), 404
+
+    Prescription.query.filter_by(appointment_id=appointment.id).delete()
+    if appointment.triage:
+        db.session.delete(appointment.triage)
+    db.session.delete(appointment)
+    db.session.commit()
+    return "", 204
+
+
+@api.post("/triage")
+def save_triage():
+    data = request.get_json() or {}
+    appointment = db.session.get(Appointment, data.get("appointmentId"))
+    if not appointment:
+        return jsonify({"error": "Appointment not found"}), 404
+
+    triage = appointment.triage
+    if not triage:
+        triage = Triage(appointment_id=appointment.id)
+        db.session.add(triage)
+
+    triage.blood_pressure = data.get("bloodPressure")
+    triage.temperature = data.get("temperature")
+    triage.symptoms = data.get("symptoms")
+    triage.notes = data.get("notes")
+
+    db.session.commit()
+    return jsonify(appointment_to_dict(appointment)), 201
+
+
+@api.get("/prescriptions")
+def list_prescriptions():
+    prescriptions = Prescription.query.order_by(Prescription.id).all()
+    return jsonify([prescription_full_to_dict(p) for p in prescriptions])
+
+
+@api.post("/prescriptions")
+def create_prescription():
+    data = request.get_json() or {}
+    appointment = db.session.get(Appointment, data.get("appointmentId"))
+    if not appointment:
+        return jsonify({"error": "Appointment not found"}), 404
+
+    prescription = Prescription(
+        appointment_id=appointment.id,
+        diagnosis=data.get("diagnosis"),
+        notes=data.get("notes"),
+        prescription=data.get("prescription"),
+        status="Pending",
+    )
+    db.session.add(prescription)
+    db.session.commit()
+    return jsonify(prescription_full_to_dict(prescription)), 201
+
+
+@api.put("/prescriptions/<int:prescription_id>")
+def update_prescription(prescription_id):
+    prescription = db.session.get(Prescription, prescription_id)
+    if not prescription:
+        return jsonify({"error": "Prescription not found"}), 404
+
+    data = request.get_json() or {}
+    prescription.status = data.get("status", prescription.status)
+    db.session.commit()
+    return jsonify(prescription_full_to_dict(prescription))
