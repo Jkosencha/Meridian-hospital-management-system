@@ -1,69 +1,39 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useAuth } from '../context/AuthContext'
 import Sidebar from '../components/Sidebar'
 import Modal from '../components/Modal'
 import DataTable from '../components/DataTable'
+import { getAppointments, saveTriage } from '../lib/api'
 
-const navItems = [{ key: 'patients', label: 'Patients' }]
-
-const patients = [
-  {
-    id: '4763462',
-    name: 'Leo Thuku',
-    date: '2006-12-01',
-    gender: 'Male',
-    contact: '+254700000001',
-    age: 20,
-  },
-  {
-    id: '7346473',
-    name: 'Daniel Brooks',
-    date: '2026-07-10',
-    gender: 'Male',
-    contact: '+254700000002',
-    age: 35,
-  },
-  {
-    id: '3764522',
-    name: 'Sarah Kim',
-    date: '2026-07-10',
-    gender: 'Female',
-    contact: '+254700000003',
-    age: 41,
-  },
+const navItems = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'appointments', label: 'Appointments' },
 ]
 
-const emptyTriageForm = {
-  weight: '',
-  height: '',
-  temperature: '',
-  bloodPressure: '',
-  heartRate: '',
-  notes: '',
-}
+const emptyTriageForm = { bloodPressure: '', temperature: '', symptoms: '', notes: '' }
+
+const fieldClass =
+  'mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent'
+const labelClass = 'text-sm font-medium text-slate-700'
 
 const columnHelper = createColumnHelper()
 
-function buildPatientColumns({ triageRecords, onView, onTriage }) {
+function buildAppointmentColumns({ onView, onTriage }) {
   return [
     columnHelper.accessor('name', { header: 'Name', meta: { className: 'text-slate-900 font-medium' } }),
     columnHelper.accessor('date', { header: 'Date' }),
-    columnHelper.accessor('id', { header: 'ID', enableSorting: false }),
+    columnHelper.accessor('time', { header: 'Time' }),
     columnHelper.accessor('gender', { header: 'Gender' }),
-    columnHelper.accessor('contact', { header: 'Contact', enableSorting: false }),
     columnHelper.accessor('age', { header: 'Age' }),
+    columnHelper.accessor('specialty', { header: 'Specialty' }),
     columnHelper.display({
-      id: 'status',
-      header: 'Status',
+      id: 'triageStatus',
+      header: 'Triage',
       cell: ({ row }) => (
-        <span
-          className={`rounded px-2 py-1 text-xs font-medium ${
-            triageRecords[row.original.id] ? 'text-green-700' : 'text-amber-700'
-          }`}
-        >
-          {triageRecords[row.original.id] ? 'Triaged' : 'Awaiting triage'}
+        <span className={row.original.triage ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
+          {row.original.triage ? 'Recorded' : 'Pending'}
         </span>
       ),
     }),
@@ -71,7 +41,7 @@ function buildPatientColumns({ triageRecords, onView, onTriage }) {
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => (
-        <div className="flex flex-col gap-1 items-stretch">
+        <div className="flex gap-1.5">
           <button
             onClick={() => onView(row.original)}
             className="rounded border border-brand-accent text-brand-accent px-2.5 py-1 font-medium hover:bg-brand-lavender"
@@ -82,7 +52,7 @@ function buildPatientColumns({ triageRecords, onView, onTriage }) {
             onClick={() => onTriage(row.original)}
             className="rounded bg-brand-accent text-white px-2.5 py-1 font-medium hover:bg-brand-accent-dark"
           >
-            Triage
+            {row.original.triage ? 'Edit triage' : 'Record triage'}
           </button>
         </div>
       ),
@@ -93,34 +63,59 @@ function buildPatientColumns({ triageRecords, onView, onTriage }) {
 export default function NurseDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [tab, setTab] = useState('patients')
-  const [selectedPatient, setSelectedPatient] = useState(null)
-  const [triagePatient, setTriagePatient] = useState(null)
-  const [triageRecords, setTriageRecords] = useState({})
+  const [tab, setTab] = useState('overview')
+
+  const [appointments, setAppointments] = useState([])
+  const [loadError, setLoadError] = useState('')
+
+  const [viewingAppointment, setViewingAppointment] = useState(null)
+  const [triagingAppointment, setTriagingAppointment] = useState(null)
   const [triageForm, setTriageForm] = useState(emptyTriageForm)
+  const [triageError, setTriageError] = useState('')
+
+  useEffect(() => {
+    getAppointments()
+      .then(setAppointments)
+      .catch(() => setLoadError('Could not load data from the server.'))
+  }, [])
 
   function handleLogout() {
     logout()
     navigate('/login')
   }
 
-  function openTriage(patient) {
-    setTriagePatient(patient)
-    setTriageForm(triageRecords[patient.id] || emptyTriageForm)
+  function openTriage(appointment) {
+    setTriagingAppointment(appointment)
+    setTriageForm(
+      appointment.triage
+        ? { ...appointment.triage }
+        : emptyTriageForm
+    )
+    setTriageError('')
   }
 
-  function handleTriageChange(e) {
+  function handleTriageFormChange(e) {
     const { name, value } = e.target
     setTriageForm((prev) => ({ ...prev, [name]: value }))
   }
 
-  function saveTriage(e) {
+  async function handleTriageSubmit(e) {
     e.preventDefault()
-    setTriageRecords((prev) => ({
-      ...prev,
-      [triagePatient.id]: triageForm,
-    }))
-    setTriagePatient(null)
+    try {
+      const updated = await saveTriage({
+        appointmentId: triagingAppointment.id,
+        bloodPressure: triageForm.bloodPressure,
+        temperature: triageForm.temperature,
+        symptoms: triageForm.symptoms,
+        notes: triageForm.notes,
+      })
+      setAppointments((prev) =>
+        prev.map((appointment) => (appointment.id === updated.id ? updated : appointment))
+      )
+      setTriagingAppointment(null)
+    } catch (err) {
+      setTriageError(err.message || 'Could not save triage. Please try again.')
+    }
   }
 
   const today = new Date().toLocaleDateString('en-US', {
@@ -129,11 +124,9 @@ export default function NurseDashboard() {
     day: 'numeric',
   })
 
-  const patientColumns = buildPatientColumns({
-    triageRecords,
-    onView: setSelectedPatient,
-    onTriage: openTriage,
-  })
+  const pendingTriageCount = appointments.filter((appt) => !appt.triage).length
+
+  const appointmentColumns = buildAppointmentColumns({ onView: setViewingAppointment, onTriage: openTriage })
 
   return (
     <div className="min-h-screen flex bg-blue-300">
@@ -146,17 +139,41 @@ export default function NurseDashboard() {
       />
 
       <main className="flex-1 min-w-0 px-8 py-8">
-        {tab === 'patients' && (
+        {loadError && (
+          <div className="mb-6 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+            {loadError}
+          </div>
+        )}
+
+        {tab === 'overview' && (
           <>
-            <h1 className="text-xl font-semibold text-slate-900">Patients</h1>
+            <h1 className="text-xl font-semibold text-slate-900">Overview</h1>
+            <p className="text-sm text-slate-500 mt-0.5">{today}</p>
+
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="border border-slate-200 bg-white px-6 py-5">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total appointments</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{appointments.length}</p>
+              </div>
+              <div className="border border-slate-200 bg-white px-6 py-5">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Awaiting triage</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{pendingTriageCount}</p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab === 'appointments' && (
+          <>
+            <h1 className="text-xl font-semibold text-slate-900">Appointments</h1>
             <p className="text-sm text-slate-500 mt-0.5">{today}</p>
             <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
               <DataTable
-                columns={patientColumns}
-                data={patients}
-                emptyMessage="No patients available"
+                columns={appointmentColumns}
+                data={appointments}
+                emptyMessage="No appointments booked"
                 searchable
-                searchPlaceholder="Search patients..."
+                searchPlaceholder="Search appointments..."
               />
             </div>
           </>
@@ -164,135 +181,119 @@ export default function NurseDashboard() {
       </main>
 
       <Modal
-        open={!!selectedPatient}
-        onClose={() => setSelectedPatient(null)}
-        title={selectedPatient ? `${selectedPatient.name}: Patient details` : ''}
+        open={!!viewingAppointment}
+        onClose={() => setViewingAppointment(null)}
+        title={viewingAppointment ? `${viewingAppointment.name}: Appointment details` : ''}
         maxWidthClass="max-w-3xl"
       >
-        {selectedPatient && (
+        {viewingAppointment && (
           <div className="divide-y divide-slate-200 text-base">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 pb-5">
               <div>
-                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">ID</p>
-                <p className="mt-1 text-slate-900">{selectedPatient.id}</p>
+                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Specialty</p>
+                <p className="mt-1 text-slate-900">{viewingAppointment.specialty}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Date</p>
-                <p className="mt-1 text-slate-900">{selectedPatient.date}</p>
+                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Date &amp; time</p>
+                <p className="mt-1 text-slate-900">
+                  {viewingAppointment.date}, {viewingAppointment.time}
+                </p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Age / Gender</p>
                 <p className="mt-1 text-slate-900">
-                  {selectedPatient.age} / {selectedPatient.gender}
+                  {viewingAppointment.age} / {viewingAppointment.gender}
                 </p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Contact</p>
-                <p className="mt-1 text-slate-900">{selectedPatient.contact || 'N/A'}</p>
+                <p className="mt-1 text-slate-900">{viewingAppointment.number}</p>
               </div>
             </div>
 
-            <div className="py-5">
+            <div className="pt-5">
               <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Vitals</p>
-              <div className="mt-2 grid grid-cols-2 gap-5">
-                <div>
-                  <p className="text-xs text-slate-500">Weight</p>
-                  <p className="text-slate-900">{triageRecords[selectedPatient.id]?.weight || 'Not recorded'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Height</p>
-                  <p className="text-slate-900">{triageRecords[selectedPatient.id]?.height || 'Not recorded'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Temperature</p>
-                  <p className="text-slate-900">{triageRecords[selectedPatient.id]?.temperature || 'Not recorded'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Blood pressure</p>
-                  <p className="text-slate-900">{triageRecords[selectedPatient.id]?.bloodPressure || 'Not recorded'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Heart rate</p>
-                  <p className="text-slate-900">{triageRecords[selectedPatient.id]?.heartRate || 'Not recorded'}</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-xs text-slate-500">Nurse notes</p>
-                <p className="text-slate-900">{triageRecords[selectedPatient.id]?.notes || 'No notes yet'}</p>
-              </div>
+              {viewingAppointment.triage ? (
+                <>
+                  <div className="mt-2 grid grid-cols-2 gap-5">
+                    <div>
+                      <p className="text-xs text-slate-500">Blood pressure</p>
+                      <p className="text-slate-900">{viewingAppointment.triage.bloodPressure}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Temperature</p>
+                      <p className="text-slate-900">{viewingAppointment.triage.temperature}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-xs text-slate-500">Symptoms</p>
+                    <p className="text-slate-900">{viewingAppointment.triage.symptoms}</p>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-xs text-slate-500">Notes</p>
+                    <p className="text-slate-900">{viewingAppointment.triage.notes}</p>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">No triage recorded yet.</p>
+              )}
             </div>
           </div>
         )}
       </Modal>
 
       <Modal
-        open={!!triagePatient}
-        onClose={() => setTriagePatient(null)}
-        title={triagePatient ? `Triage for ${triagePatient.name}` : ''}
+        open={!!triagingAppointment}
+        onClose={() => setTriagingAppointment(null)}
+        title={triagingAppointment ? `Record triage for ${triagingAppointment.name}` : ''}
       >
-        <form onSubmit={saveTriage} className="space-y-4">
+        <form onSubmit={handleTriageSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium text-slate-700">Weight (kg)</label>
+              <label className={labelClass}>Blood pressure</label>
               <input
-                type="text"
-                name="weight"
-                value={triageForm.weight}
-                onChange={handleTriageChange}
-                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+                required
+                name="bloodPressure"
+                placeholder="120/80"
+                value={triageForm.bloodPressure}
+                onChange={handleTriageFormChange}
+                className={fieldClass}
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700">Height (cm)</label>
+              <label className={labelClass}>Temperature</label>
               <input
-                type="text"
-                name="height"
-                value={triageForm.height}
-                onChange={handleTriageChange}
-                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Temperature (°C)</label>
-              <input
-                type="text"
+                required
                 name="temperature"
+                placeholder="37.0"
                 value={triageForm.temperature}
-                onChange={handleTriageChange}
-                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Heart rate (bpm)</label>
-              <input
-                type="text"
-                name="heartRate"
-                value={triageForm.heartRate}
-                onChange={handleTriageChange}
-                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+                onChange={handleTriageFormChange}
+                className={fieldClass}
               />
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700">Blood pressure</label>
-            <input
-              type="text"
-              name="bloodPressure"
-              value={triageForm.bloodPressure}
-              onChange={handleTriageChange}
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+            <label className={labelClass}>Symptoms</label>
+            <textarea
+              required
+              rows={2}
+              name="symptoms"
+              value={triageForm.symptoms}
+              onChange={handleTriageFormChange}
+              className={fieldClass}
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700">Nurse notes</label>
+            <label className={labelClass}>Notes</label>
             <textarea
               rows={2}
               name="notes"
               value={triageForm.notes}
-              onChange={handleTriageChange}
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
+              onChange={handleTriageFormChange}
+              className={fieldClass}
             />
           </div>
+          {triageError && <p className="text-sm text-red-600">{triageError}</p>}
           <button
             type="submit"
             className="w-full rounded bg-brand-accent py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark"
