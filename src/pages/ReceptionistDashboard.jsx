@@ -9,12 +9,14 @@ import {
   getPatients,
   createPatient,
   updatePatient,
+  deletePatient,
   getAppointments,
   createAppointment,
   updateAppointment,
+  deleteAppointment,
 } from '../lib/api'
 import { specialties } from '../data/specialties'
-import { countDigits } from '../lib/validators'
+import { countDigits, normalizeGender } from '../lib/validators'
 
 const navItems = [
   { key: 'overview', label: 'Overview' },
@@ -28,7 +30,7 @@ const emptyAppointmentForm = {
   date: '',
   time: '',
   number: '',
-  gender: 'female',
+  gender: 'Male',
   age: '',
   specialty: specialties[0],
 }
@@ -91,6 +93,15 @@ function buildAppointmentColumns({ onView, onEdit }) {
       ),
     }),
     columnHelper.display({
+      id: 'triage',
+      header: 'Triage',
+      cell: ({ row }) => (
+        <span className={row.original.triage ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
+          {row.original.triage ? 'Recorded' : 'Pending'}
+        </span>
+      ),
+    }),
+    columnHelper.display({
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => (
@@ -129,11 +140,15 @@ export default function ReceptionistDashboard() {
   const [editingPatientId, setEditingPatientId] = useState(null)
   const [patientForm, setPatientForm] = useState(emptyPatientForm)
   const [patientContactError, setPatientContactError] = useState('')
+  const [patientDeleteConfirming, setPatientDeleteConfirming] = useState(false)
 
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false)
   const [editingAppointmentId, setEditingAppointmentId] = useState(null)
   const [appointmentForm, setAppointmentForm] = useState(emptyAppointmentForm)
   const [appointmentContactError, setAppointmentContactError] = useState('')
+  const [appointmentDeleteConfirming, setAppointmentDeleteConfirming] = useState(false)
+  const [selectedPatientId, setSelectedPatientId] = useState(null)
+  const [showPatientSuggestions, setShowPatientSuggestions] = useState(false)
 
   useEffect(() => {
     Promise.all([getPatients(), getAppointments()])
@@ -153,6 +168,7 @@ export default function ReceptionistDashboard() {
     setEditingPatientId(null)
     setPatientForm(emptyPatientForm)
     setPatientContactError('')
+    setPatientDeleteConfirming(false)
     setPatientModalOpen(true)
   }
 
@@ -161,11 +177,12 @@ export default function ReceptionistDashboard() {
     setPatientForm({
       name: patient.name,
       date: patient.date,
-      gender: patient.gender,
+      gender: normalizeGender(patient.gender),
       contact: patient.contact,
       age: patient.age,
     })
     setPatientContactError('')
+    setPatientDeleteConfirming(false)
     setPatientModalOpen(true)
   }
 
@@ -198,10 +215,24 @@ export default function ReceptionistDashboard() {
     }
   }
 
+  async function handleDeletePatient() {
+    try {
+      await deletePatient(editingPatientId)
+      setPatients((prev) => prev.filter((patient) => patient.id !== editingPatientId))
+      setPatientModalOpen(false)
+    } catch (err) {
+      setPatientContactError(err.message || 'Could not delete patient. Please try again.')
+      setPatientDeleteConfirming(false)
+    }
+  }
+
   function openAddAppointment() {
     setEditingAppointmentId(null)
     setAppointmentForm(emptyAppointmentForm)
     setAppointmentContactError('')
+    setAppointmentDeleteConfirming(false)
+    setSelectedPatientId(null)
+    setShowPatientSuggestions(false)
     setAppointmentModalOpen(true)
   }
 
@@ -212,11 +243,14 @@ export default function ReceptionistDashboard() {
       date: appointment.date,
       time: appointment.time,
       number: appointment.number,
-      gender: appointment.gender,
+      gender: normalizeGender(appointment.gender),
       age: appointment.age,
       specialty: appointment.specialty,
     })
     setAppointmentContactError('')
+    setAppointmentDeleteConfirming(false)
+    setSelectedPatientId(null)
+    setShowPatientSuggestions(false)
     setAppointmentModalOpen(true)
   }
 
@@ -224,7 +258,35 @@ export default function ReceptionistDashboard() {
     const { name, value } = e.target
     setAppointmentForm((prev) => ({ ...prev, [name]: value }))
     if (name === 'number') setAppointmentContactError('')
+    if (name === 'name') {
+      setSelectedPatientId(null)
+      setShowPatientSuggestions(true)
+    }
   }
+
+  function selectPatientForAppointment(patient) {
+    setAppointmentForm((prev) => ({
+      ...prev,
+      name: patient.name,
+      number: patient.contact,
+      gender: patient.gender,
+      age: patient.age,
+    }))
+    setSelectedPatientId(patient.id)
+    setShowPatientSuggestions(false)
+  }
+
+  function clearSelectedPatient() {
+    setAppointmentForm((prev) => ({ ...prev, name: '', number: '', gender: 'Male', age: '' }))
+    setSelectedPatientId(null)
+  }
+
+  const patientSuggestions =
+    !editingAppointmentId && !selectedPatientId && appointmentForm.name.trim().length > 0
+      ? patients
+          .filter((patient) => patient.name.toLowerCase().includes(appointmentForm.name.trim().toLowerCase()))
+          .slice(0, 5)
+      : []
 
   async function saveAppointment(e) {
     e.preventDefault()
@@ -232,7 +294,11 @@ export default function ReceptionistDashboard() {
       setAppointmentContactError('Phone number cannot be more than 10 digits')
       return
     }
-    const payload = { ...appointmentForm, age: Number(appointmentForm.age) }
+    const payload = {
+      ...appointmentForm,
+      age: Number(appointmentForm.age),
+      ...(selectedPatientId ? { patientId: selectedPatientId } : {}),
+    }
     try {
       if (editingAppointmentId) {
         const updated = await updateAppointment(editingAppointmentId, {
@@ -251,6 +317,17 @@ export default function ReceptionistDashboard() {
       setAppointmentModalOpen(false)
     } catch (err) {
       setAppointmentContactError(err.message || 'Could not save appointment. Please try again.')
+    }
+  }
+
+  async function handleDeleteAppointment() {
+    try {
+      await deleteAppointment(editingAppointmentId)
+      setAppointments((prev) => prev.filter((appointment) => appointment.id !== editingAppointmentId))
+      setAppointmentModalOpen(false)
+    } catch (err) {
+      setAppointmentContactError(err.message || 'Could not delete appointment. Please try again.')
+      setAppointmentDeleteConfirming(false)
     }
   }
 
@@ -417,6 +494,24 @@ export default function ReceptionistDashboard() {
                 {viewingAppointment.status}
               </p>
             </div>
+            <div className="col-span-2 sm:col-span-4">
+              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Triage</p>
+              {viewingAppointment.triage ? (
+                <div className="mt-1 grid grid-cols-2 gap-3 text-sm">
+                  <p className="text-slate-900">
+                    Blood pressure: <span className="font-medium">{viewingAppointment.triage.bloodPressure}</span>
+                  </p>
+                  <p className="text-slate-900">
+                    Temperature: <span className="font-medium">{viewingAppointment.triage.temperature}</span>
+                  </p>
+                  <p className="text-slate-900 col-span-2">
+                    Symptoms: <span className="font-medium">{viewingAppointment.triage.symptoms}</span>
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">Not recorded yet.</p>
+              )}
+            </div>
           </div>
         )}
       </Modal>
@@ -426,6 +521,31 @@ export default function ReceptionistDashboard() {
         onClose={() => setPatientModalOpen(false)}
         title={editingPatientId ? 'Edit Patient' : 'Add Patient'}
       >
+        {patientDeleteConfirming ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-700">
+              Are you sure you want to delete <span className="font-medium">{patientForm.name}</span>? This
+              cannot be undone.
+            </p>
+            {patientContactError && <p className="text-sm text-red-600">{patientContactError}</p>}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPatientDeleteConfirming(false)}
+                className="flex-1 rounded border border-slate-300 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePatient}
+                className="flex-1 rounded bg-red-600 py-2.5 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Yes, delete
+              </button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={savePatient} className="space-y-4">
           <div>
             <label className="text-sm font-medium text-slate-700">Full name</label>
@@ -497,7 +617,17 @@ export default function ReceptionistDashboard() {
           >
             {editingPatientId ? 'Update patient' : 'Save patient'}
           </button>
+          {editingPatientId && (
+            <button
+              type="button"
+              onClick={() => setPatientDeleteConfirming(true)}
+              className="w-full rounded border border-red-300 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            >
+              Delete patient
+            </button>
+          )}
         </form>
+        )}
       </Modal>
 
       <Modal
@@ -505,17 +635,73 @@ export default function ReceptionistDashboard() {
         onClose={() => setAppointmentModalOpen(false)}
         title={editingAppointmentId ? 'Edit Appointment' : 'Add Appointment'}
       >
+        {appointmentDeleteConfirming ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-700">
+              Are you sure you want to delete this appointment for{' '}
+              <span className="font-medium">{appointmentForm.name}</span>? This cannot be undone.
+            </p>
+            {appointmentContactError && <p className="text-sm text-red-600">{appointmentContactError}</p>}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setAppointmentDeleteConfirming(false)}
+                className="flex-1 rounded border border-slate-300 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAppointment}
+                className="flex-1 rounded bg-red-600 py-2.5 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Yes, delete
+              </button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={saveAppointment} className="space-y-4">
-          <div>
+          <div className="relative">
             <label className="text-sm font-medium text-slate-700">Patient name</label>
             <input
               required
               type="text"
               name="name"
+              autoComplete="off"
               value={appointmentForm.name}
               onChange={handleAppointmentFormChange}
+              onFocus={() => setShowPatientSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowPatientSuggestions(false), 150)}
               className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
             />
+            {!editingAppointmentId && selectedPatientId && (
+              <p className="mt-1 text-xs text-green-700">
+                Using existing patient record.{' '}
+                <button
+                  type="button"
+                  onClick={clearSelectedPatient}
+                  className="underline hover:text-green-800"
+                >
+                  Change
+                </button>
+              </p>
+            )}
+            {showPatientSuggestions && patientSuggestions.length > 0 && (
+              <ul className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded border border-slate-300 bg-white shadow-lg">
+                {patientSuggestions.map((patient) => (
+                  <li key={patient.id}>
+                    <button
+                      type="button"
+                      onMouseDown={() => selectPatientForAppointment(patient)}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-brand-lavender"
+                    >
+                      <span className="font-medium text-slate-900">{patient.name}</span>
+                      <span className="ml-2 text-slate-500">{patient.contact}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -602,7 +788,17 @@ export default function ReceptionistDashboard() {
           >
             {editingAppointmentId ? 'Update appointment' : 'Save appointment'}
           </button>
+          {editingAppointmentId && (
+            <button
+              type="button"
+              onClick={() => setAppointmentDeleteConfirming(true)}
+              className="w-full rounded border border-red-300 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            >
+              Delete appointment
+            </button>
+          )}
         </form>
+        )}
       </Modal>
     </div>
   )
