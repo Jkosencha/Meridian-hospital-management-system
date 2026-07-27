@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import { useAuth } from '../context/AuthContext'
 import Sidebar from '../components/Sidebar'
 import Modal from '../components/Modal'
 import DataTable from '../components/DataTable'
-import { initialAppointments, statusOptions } from '../data/appointments'
+import { statusOptions } from '../data/appointments'
+import { getAppointments, updateAppointment, createPrescription } from '../lib/api'
 
 const navItems = [
   { key: 'overview', label: 'Overview' },
@@ -41,7 +42,7 @@ function buildAppointmentColumns({ onStatusChange, onView, onPrescribe }) {
     columnHelper.accessor('name', { header: 'Name', meta: { className: 'text-slate-900 font-medium' } }),
     columnHelper.accessor('date', { header: 'Date' }),
     columnHelper.accessor('time', { header: 'Time' }),
-    columnHelper.accessor('id', { header: 'National ID', enableSorting: false }),
+    columnHelper.accessor('id', { header: 'ID', enableSorting: false }),
     columnHelper.accessor('number', { header: 'Contact', enableSorting: false }),
     columnHelper.accessor('gender', { header: 'Gender' }),
     columnHelper.accessor('age', { header: 'Age' }),
@@ -80,35 +81,69 @@ export default function DoctorDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState('overview')
-  const [appointments, setAppointments] = useState(initialAppointments)
+  const [appointments, setAppointments] = useState([])
+  const [loadError, setLoadError] = useState('')
   const [viewingAppointment, setViewingAppointment] = useState(null)
   const [prescribingAppointment, setPrescribingAppointment] = useState(null)
   const [prescriptionForm, setPrescriptionForm] = useState(emptyPrescription)
+  const [prescriptionError, setPrescriptionError] = useState('')
+
+  useEffect(() => {
+    getAppointments()
+      .then(setAppointments)
+      .catch(() => setLoadError('Could not load data from the server.'))
+  }, [])
 
   function handleLogout() {
     logout()
     navigate('/login')
   }
 
-  function handleStatusChange(id, status) {
-    setAppointments((prev) => prev.map((appt) => (appt.id === id ? { ...appt, status } : appt)))
+  async function handleStatusChange(id, status) {
+    try {
+      const updated = await updateAppointment(id, { status })
+      setAppointments((prev) => prev.map((appt) => (appt.id === id ? updated : appt)))
+    } catch (err) {
+      setLoadError(err.message || 'Could not update status. Please try again.')
+    }
   }
 
   function openPrescribe(appointment) {
     setPrescriptionForm(emptyPrescription)
+    setPrescriptionError('')
     setPrescribingAppointment(appointment)
   }
 
-  function handlePrescriptionSubmit(e) {
+  async function handlePrescriptionSubmit(e) {
     e.preventDefault()
-    setAppointments((prev) =>
-      prev.map((appt) =>
-        appt.id === prescribingAppointment.id
-          ? { ...appt, prescriptions: [...appt.prescriptions, prescriptionForm] }
-          : appt
+    try {
+      const created = await createPrescription({
+        appointmentId: prescribingAppointment.id,
+        ...prescriptionForm,
+      })
+      setAppointments((prev) =>
+        prev.map((appt) =>
+          appt.id === prescribingAppointment.id
+            ? {
+                ...appt,
+                prescriptions: [
+                  ...appt.prescriptions,
+                  {
+                    id: created.id,
+                    diagnosis: created.diagnosis,
+                    notes: created.notes,
+                    prescription: created.prescription,
+                    status: created.status,
+                  },
+                ],
+              }
+            : appt
+        )
       )
-    )
-    setPrescribingAppointment(null)
+      setPrescribingAppointment(null)
+    } catch (err) {
+      setPrescriptionError(err.message || 'Could not save prescription. Please try again.')
+    }
   }
 
   const today = new Date().toLocaleDateString('en-US', {
@@ -136,6 +171,11 @@ export default function DoctorDashboard() {
       />
 
       <main className="flex-1 min-w-0 px-8 py-8">
+        {loadError && (
+          <div className="mb-6 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+            {loadError}
+          </div>
+        )}
         {tab === 'overview' && (
           <>
             <h1 className="text-xl font-semibold text-slate-900">Overview</h1>
@@ -192,7 +232,7 @@ export default function DoctorDashboard() {
           <div className="divide-y divide-slate-200 text-base">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 pb-5">
               <div>
-                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">National ID</p>
+                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">ID</p>
                 <p className="mt-1 text-slate-900">{viewingAppointment.id}</p>
               </div>
               <div>
@@ -220,24 +260,30 @@ export default function DoctorDashboard() {
 
             <div className="py-5">
               <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Vitals</p>
-              <div className="mt-2 grid grid-cols-2 gap-5">
-                <div>
-                  <p className="text-xs text-slate-500">Blood pressure</p>
-                  <p className="text-slate-900">{viewingAppointment.triage.bloodPressure}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Temperature</p>
-                  <p className="text-slate-900">{viewingAppointment.triage.temperature}</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-xs text-slate-500">Symptoms</p>
-                <p className="text-slate-900">{viewingAppointment.triage.symptoms}</p>
-              </div>
-              <div className="mt-3">
-                <p className="text-xs text-slate-500">Triage notes</p>
-                <p className="text-slate-900">{viewingAppointment.triage.notes}</p>
-              </div>
+              {viewingAppointment.triage ? (
+                <>
+                  <div className="mt-2 grid grid-cols-2 gap-5">
+                    <div>
+                      <p className="text-xs text-slate-500">Blood pressure</p>
+                      <p className="text-slate-900">{viewingAppointment.triage.bloodPressure}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Temperature</p>
+                      <p className="text-slate-900">{viewingAppointment.triage.temperature}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-xs text-slate-500">Symptoms</p>
+                    <p className="text-slate-900">{viewingAppointment.triage.symptoms}</p>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-xs text-slate-500">Triage notes</p>
+                    <p className="text-slate-900">{viewingAppointment.triage.notes}</p>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">No triage recorded yet.</p>
+              )}
             </div>
 
             {viewingAppointment.prescriptions.length > 0 && (
@@ -294,6 +340,7 @@ export default function DoctorDashboard() {
               className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-accent"
             />
           </div>
+          {prescriptionError && <p className="text-sm text-red-600">{prescriptionError}</p>}
           <button
             type="submit"
             className="w-full rounded bg-brand-accent py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark"
