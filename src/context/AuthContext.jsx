@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { login as apiLogin, setAuthToken, setUnauthorizedHandler } from '../lib/api'
-import { AuthContext } from './authContext'
+import { AuthContext } from './authContextValue'
 
 const USER_KEY = 'meridian_user'
 
