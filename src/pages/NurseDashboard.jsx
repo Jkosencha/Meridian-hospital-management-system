@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import Sidebar from '../components/Sidebar'
 import Modal from '../components/Modal'
 import DataTable from '../components/DataTable'
-import { getAppointments, saveTriage } from '../lib/api'
+import { getAppointments, saveTriage, deleteTriage } from '../lib/api'
+import { usePolling } from '../lib/usePolling'
+import { useTabParam } from '../lib/useTabParam'
+import StatCard from '../components/StatCard'
 
 const navItems = [
   { key: 'overview', label: 'Overview' },
@@ -63,7 +66,7 @@ function buildAppointmentColumns({ onView, onTriage }) {
 export default function NurseDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useTabParam('overview')
 
   const [appointments, setAppointments] = useState([])
   const [loadError, setLoadError] = useState('')
@@ -72,12 +75,19 @@ export default function NurseDashboard() {
   const [triagingAppointment, setTriagingAppointment] = useState(null)
   const [triageForm, setTriageForm] = useState(emptyTriageForm)
   const [triageError, setTriageError] = useState('')
+  const [triageDeleteConfirming, setTriageDeleteConfirming] = useState(false)
 
-  useEffect(() => {
-    getAppointments()
+  function loadData() {
+    return getAppointments()
       .then(setAppointments)
       .catch(() => setLoadError('Could not load data from the server.'))
+  }
+
+  useEffect(() => {
+    loadData()
   }, [])
+
+  usePolling(loadData)
 
   function handleLogout() {
     logout()
@@ -92,6 +102,7 @@ export default function NurseDashboard() {
         : emptyTriageForm
     )
     setTriageError('')
+    setTriageDeleteConfirming(false)
   }
 
   function handleTriageFormChange(e) {
@@ -118,6 +129,21 @@ export default function NurseDashboard() {
     }
   }
 
+  async function handleDeleteTriage() {
+    try {
+      await deleteTriage(triagingAppointment.id)
+      setAppointments((prev) =>
+        prev.map((appointment) =>
+          appointment.id === triagingAppointment.id ? { ...appointment, triage: null } : appointment
+        )
+      )
+      setTriagingAppointment(null)
+    } catch (err) {
+      setTriageError(err.message || 'Could not delete triage. Please try again.')
+      setTriageDeleteConfirming(false)
+    }
+  }
+
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -125,11 +151,12 @@ export default function NurseDashboard() {
   })
 
   const pendingTriageCount = appointments.filter((appt) => !appt.triage).length
+  const nextUpAppointments = appointments.filter((appt) => !appt.triage).slice(0, 3)
 
   const appointmentColumns = buildAppointmentColumns({ onView: setViewingAppointment, onTriage: openTriage })
 
   return (
-    <div className="min-h-screen flex bg-blue-300">
+    <div className="min-h-screen flex bg-brand-sky">
       <Sidebar
         navItems={navItems}
         activeKey={tab}
@@ -151,14 +178,19 @@ export default function NurseDashboard() {
             <p className="text-sm text-slate-500 mt-0.5">{today}</p>
 
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="border border-slate-200 bg-white px-6 py-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total appointments</p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{appointments.length}</p>
+              <StatCard label="Total appointments" value={appointments.length} />
+              <StatCard label="Awaiting triage" value={pendingTriageCount} />
+            </div>
+
+            <div className="mt-8 border border-slate-200 bg-white overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-200">
+                <h2 className="text-sm font-medium text-slate-900">Next up</h2>
               </div>
-              <div className="border border-slate-200 bg-white px-6 py-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Awaiting triage</p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{pendingTriageCount}</p>
-              </div>
+              <DataTable
+                columns={appointmentColumns}
+                data={nextUpAppointments}
+                emptyMessage="No appointments awaiting triage"
+              />
             </div>
           </>
         )}
@@ -167,7 +199,7 @@ export default function NurseDashboard() {
           <>
             <h1 className="text-xl font-semibold text-slate-900">Appointments</h1>
             <p className="text-sm text-slate-500 mt-0.5">{today}</p>
-            <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
+            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
               <DataTable
                 columns={appointmentColumns}
                 data={appointments}
@@ -247,6 +279,31 @@ export default function NurseDashboard() {
         onClose={() => setTriagingAppointment(null)}
         title={triagingAppointment ? `Record triage for ${triagingAppointment.name}` : ''}
       >
+        {triageDeleteConfirming ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-700">
+              Are you sure you want to delete the triage record for{' '}
+              <span className="font-medium">{triagingAppointment?.name}</span>? This cannot be undone.
+            </p>
+            {triageError && <p className="text-sm text-red-600">{triageError}</p>}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setTriageDeleteConfirming(false)}
+                className="flex-1 rounded border border-slate-300 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteTriage}
+                className="flex-1 rounded bg-red-600 py-2.5 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Yes, delete
+              </button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleTriageSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -300,7 +357,17 @@ export default function NurseDashboard() {
           >
             Save triage
           </button>
+          {triagingAppointment?.triage && (
+            <button
+              type="button"
+              onClick={() => setTriageDeleteConfirming(true)}
+              className="w-full rounded border border-red-300 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            >
+              Delete triage
+            </button>
+          )}
         </form>
+        )}
       </Modal>
     </div>
   )
