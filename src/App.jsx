@@ -19,7 +19,7 @@ export default function App() {
           <Route
             path="/doctor"
             element={
-              <RequireAuth>
+              <RequireAuth roles={['doctor']}>
                 <DoctorDashboard />
               </RequireAuth>
             }
@@ -27,7 +27,7 @@ export default function App() {
           <Route
             path="/receptionist"
             element={
-              <RequireAuth>
+              <RequireAuth roles={['receptionist']}>
                 <ReceptionistDashboard />
               </RequireAuth>
             }
@@ -35,7 +35,7 @@ export default function App() {
           <Route
             path="/nurse"
             element={
-              <RequireAuth>
+              <RequireAuth roles={['nurse']}>
                 <NurseDashboard />
               </RequireAuth>
             }
@@ -43,7 +43,7 @@ export default function App() {
           <Route
             path="/pharmacy"
             element={
-              <RequireAuth>
+              <RequireAuth roles={['pharmacy']}>
                 <PharmacyDashboard />
               </RequireAuth>
             }
@@ -51,7 +51,7 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              <RequireAuth>
+              <RequireAuth roles={['admin']}>
                 <AdminDashboard />
               </RequireAuth>
             }

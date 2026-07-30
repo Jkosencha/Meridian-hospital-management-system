@@ -4,6 +4,6 @@ import { useAuth } from '../context/useAuth'
 export default function RequireAuth({ children, roles }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
-  if (roles && !roles.includes(user.role)) return <Navigate to="/login" replace />
+  if (roles && !roles.includes(user.role)) return <Navigate to={`/${user.role}`} replace />
   return children
 }
