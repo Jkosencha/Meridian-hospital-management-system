@@ -1,27 +1,48 @@
-import { createContext, useContext, useState } from 'react'
-import { demoUsers } from '../data/demoUsers'
+import { useEffect, useState } from 'react'
+import { login as apiLogin, setAuthToken, setUnauthorizedHandler } from '../lib/api'
+import { AuthContext } from './authContext'
 
-const AuthContext = createContext(null)
+const USER_KEY = 'meridian_user'
+
+function loadStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(loadStoredUser)
   const [error, setError] = useState('')
 
-  function login(email, password) {
-    const match = demoUsers.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    )
-    if (!match) {
-      setError('Invalid email or password')
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null)
+      localStorage.removeItem(USER_KEY)
+      setAuthToken(null)
+    })
+  }, [])
+
+  async function login(email, password) {
+    try {
+      const { token, user: loggedInUser } = await apiLogin(email, password)
+      setAuthToken(token)
+      localStorage.setItem(USER_KEY, JSON.stringify(loggedInUser))
+      setUser(loggedInUser)
+      setError('')
+      return loggedInUser
+    } catch (err) {
+      setError(err.message || 'Invalid email or password')
       return null
     }
-    setError('')
-    setUser(match)
-    return match
   }
 
   function logout() {
     setUser(null)
+    setAuthToken(null)
+    localStorage.removeItem(USER_KEY)
   }
 
   return (
@@ -29,8 +50,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  return useContext(AuthContext)
 }

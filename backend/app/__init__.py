@@ -22,4 +22,8 @@ def create_app(config_class=Config):
 
     app.register_blueprint(api)
 
+    from app.seed import register_seed_command
+
+    register_seed_command(app)
+
     return app
