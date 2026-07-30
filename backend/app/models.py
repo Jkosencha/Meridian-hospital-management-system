@@ -41,6 +41,7 @@ class Appointment(db.Model):
     patient = db.relationship("Patient", back_populates="appointments")
     triage = db.relationship("Triage", back_populates="appointment", uselist=False)
     prescriptions = db.relationship("Prescription", back_populates="appointment")
+    billing = db.relationship("Billing", back_populates="appointment", uselist=False)
 
 
 class Triage(db.Model):
@@ -67,3 +68,32 @@ class Prescription(db.Model):
     status = db.Column(db.String(20), nullable=False, default="Pending")
 
     appointment = db.relationship("Appointment", back_populates="prescriptions")
+    billing = db.relationship("Billing", back_populates="prescription", uselist=False)
+
+
+class Billing(db.Model):
+    __tablename__ = "billing"
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey("patients.id"), nullable=False)
+    appointment_id = db.Column(db.Integer, db.ForeignKey("appointments.id"), unique=True, nullable=True)
+    prescription_id = db.Column(db.Integer, db.ForeignKey("prescriptions.id"), unique=True, nullable=True)
+    source = db.Column(db.String(20), nullable=False)  # "appointment" | "medication" | "manual"
+    description = db.Column(db.String(255))
+    specialty = db.Column(db.String(80))
+    amount = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="Pending")  # "Pending" | "Paid"
+    created_at = db.Column(db.Date, nullable=False)
+
+    patient = db.relationship("Patient")
+    appointment = db.relationship("Appointment", back_populates="billing")
+    prescription = db.relationship("Prescription", back_populates="billing")
+
+
+class FeeRate(db.Model):
+    __tablename__ = "fee_rates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(80), unique=True, nullable=False)
+    label = db.Column(db.String(120), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
