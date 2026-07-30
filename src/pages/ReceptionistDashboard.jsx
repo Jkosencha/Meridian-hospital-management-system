@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import Sidebar from '../components/Sidebar'
 import Modal from '../components/Modal'
 import DataTable from '../components/DataTable'
@@ -14,9 +14,102 @@ import {
   createAppointment,
   updateAppointment,
   deleteAppointment,
+  getBilling,
+  updateBilling,
 } from '../lib/api'
 import { specialties } from '../data/specialties'
 import { countDigits, normalizeGender } from '../lib/validators'
+import { usePolling } from '../lib/usePolling'
+import { useTabParam } from '../lib/useTabParam'
+import StatCard from '../components/StatCard'
+import { DonutChart } from '../components/charts'
+import { formatKsh } from '../lib/currency'
+
+const appointmentStatusColor = {
+  Pending: { hex: '#f472b6', textClass: 'text-pink-700' },
+  Completed: { hex: '#22c55e', textClass: 'text-green-700' },
+  Cancelled: { hex: '#cbd5e1', textClass: 'text-slate-500' },
+}
+
+const billingStatusColor = {
+  Pending: 'text-amber-700',
+  Paid: 'text-green-700',
+}
+
+function escapeHtml(value) {
+  const chars = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+  return String(value ?? '').replace(/[&<>"']/g, (char) => chars[char])
+}
+
+function buildReceiptHtml(patient, bills) {
+  const total = bills.reduce((sum, bill) => sum + bill.amount, 0)
+  const rows = bills
+    .map(
+      (bill) => `
+        <tr>
+          <td>${escapeHtml(bill.description)}</td>
+          <td>${escapeHtml(bill.specialty) || 'N/A'}</td>
+          <td>${escapeHtml(bill.date)}</td>
+          <td>${escapeHtml(bill.status)}</td>
+          <td class="amount">${formatKsh(bill.amount)}</td>
+        </tr>`
+    )
+    .join('')
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<title>Receipt - ${escapeHtml(patient.name)}</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #0b0b0b; padding: 40px; max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #52514e; font-size: 13px; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e1e0d9; font-size: 14px; }
+  th { color: #52514e; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+  .amount { text-align: right; }
+  tfoot td { font-weight: 700; border-bottom: none; padding-top: 12px; }
+  .patient-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin: 20px 0; font-size: 14px; }
+  .patient-info span { color: #52514e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; display: block; }
+  .no-print { margin-top: 24px; }
+  button { background: #5b65dc; color: white; border: none; border-radius: 4px; padding: 8px 16px; font-size: 14px; cursor: pointer; }
+  @media print { .no-print { display: none; } }
+</style>
+</head>
+<body>
+  <h1>Meridian Hospital</h1>
+  <p class="subtitle">Billing receipt - generated ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+
+  <div class="patient-info">
+    <div><span>Patient</span>${escapeHtml(patient.name)}</div>
+    <div><span>Patient ID</span>${escapeHtml(patient.id)}</div>
+    <div><span>Age / Gender</span>${escapeHtml(patient.age)} / ${escapeHtml(patient.gender)}</div>
+    <div><span>Contact</span>${escapeHtml(patient.contact) || 'N/A'}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Description</th><th>Specialty</th><th>Date</th><th>Status</th><th class="amount">Amount</th></tr>
+    </thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr><td colspan="4">Total</td><td class="amount">${formatKsh(total)}</td></tr>
+    </tfoot>
+  </table>
+
+  <div class="no-print">
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+</body>
+</html>`
+}
+
+function countByStatus(items) {
+  return items.reduce((counts, item) => {
+    counts[item.status] = (counts[item.status] || 0) + 1
+    return counts
+  }, {})
+}
 
 const navItems = [
   { key: 'overview', label: 'Overview' },
@@ -127,10 +220,11 @@ function buildAppointmentColumns({ onView, onEdit }) {
 export default function ReceptionistDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useTabParam('overview')
 
   const [patients, setPatients] = useState([])
   const [appointments, setAppointments] = useState([])
+  const [billing, setBilling] = useState([])
   const [loadError, setLoadError] = useState('')
 
   const [viewingPatient, setViewingPatient] = useState(null)
@@ -150,18 +244,42 @@ export default function ReceptionistDashboard() {
   const [selectedPatientId, setSelectedPatientId] = useState(null)
   const [showPatientSuggestions, setShowPatientSuggestions] = useState(false)
 
-  useEffect(() => {
-    Promise.all([getPatients(), getAppointments()])
-      .then(([patientData, appointmentData]) => {
+  function loadData() {
+    return Promise.all([getPatients(), getAppointments(), getBilling()])
+      .then(([patientData, appointmentData, billingData]) => {
         setPatients(patientData)
         setAppointments(appointmentData)
+        setBilling(billingData)
       })
       .catch(() => setLoadError('Could not load data from the server.'))
+  }
+
+  useEffect(() => {
+    loadData()
   }, [])
+
+  usePolling(loadData)
 
   function handleLogout() {
     logout()
     navigate('/login')
+  }
+
+  function openReceipt(patient, patientBills) {
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(buildReceiptHtml(patient, patientBills))
+    win.document.close()
+  }
+
+  async function handleMarkBillPaid(bill) {
+    try {
+      const nextStatus = bill.status === 'Paid' ? 'Pending' : 'Paid'
+      const updated = await updateBilling(bill.id, { status: nextStatus })
+      setBilling((prev) => prev.map((b) => (b.id === updated.id ? updated : b)))
+    } catch (err) {
+      setLoadError(err.message || 'Could not update billing record. Please try again.')
+    }
   }
 
   function openAddPatient() {
@@ -343,8 +461,20 @@ export default function ReceptionistDashboard() {
     onEdit: openEditAppointment,
   })
 
+  const appointmentsByStatus = countByStatus(appointments)
+  const appointmentStatusSegments = ['Pending', 'Completed', 'Cancelled'].map((status) => ({
+    label: status,
+    count: appointmentsByStatus[status] || 0,
+    hex: appointmentStatusColor[status].hex,
+    textClass: appointmentStatusColor[status].textClass,
+  }))
+
+  const viewingPatientBills = viewingPatient
+    ? billing.filter((bill) => bill.patientId === viewingPatient.id)
+    : []
+
   return (
-    <div className="min-h-screen flex bg-blue-300">
+    <div className="min-h-screen flex bg-brand-sky">
       <Sidebar
         navItems={navItems}
         activeKey={tab}
@@ -365,14 +495,17 @@ export default function ReceptionistDashboard() {
             <p className="text-sm text-slate-500 mt-0.5">{today}</p>
 
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="border border-slate-200 bg-white px-6 py-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total patients</p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{patients.length}</p>
-              </div>
-              <div className="border border-slate-200 bg-white px-6 py-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total appointments</p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{appointments.length}</p>
-              </div>
+              <StatCard label="Total patients" value={patients.length} />
+              <StatCard label="Total appointments" value={appointments.length} />
+            </div>
+
+            <div className="mt-8 grid grid-cols-1 gap-5">
+              <DonutChart
+                title="Appointments by status"
+                segments={appointmentStatusSegments}
+                emptyMessage="No appointments yet"
+                centerLabel="Appointments"
+              />
             </div>
           </>
         )}
@@ -391,7 +524,7 @@ export default function ReceptionistDashboard() {
                 Add Patient
               </button>
             </div>
-            <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
+            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
               <DataTable
                 columns={patientColumns}
                 data={patients}
@@ -417,7 +550,7 @@ export default function ReceptionistDashboard() {
                 Add Appointment
               </button>
             </div>
-            <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
+            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
               <DataTable
                 columns={appointmentColumns}
                 data={appointments}
@@ -437,24 +570,72 @@ export default function ReceptionistDashboard() {
         maxWidthClass="max-w-3xl"
       >
         {viewingPatient && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 text-base">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">ID</p>
-              <p className="mt-1 text-slate-900">{viewingPatient.id}</p>
+          <div className="space-y-5 text-base">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">ID</p>
+                <p className="mt-1 text-slate-900">{viewingPatient.id}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Date</p>
+                <p className="mt-1 text-slate-900">{viewingPatient.date}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Age / Gender</p>
+                <p className="mt-1 text-slate-900">
+                  {viewingPatient.age} / {viewingPatient.gender}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Contact</p>
+                <p className="mt-1 text-slate-900">{viewingPatient.contact || 'N/A'}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Date</p>
-              <p className="mt-1 text-slate-900">{viewingPatient.date}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Age / Gender</p>
-              <p className="mt-1 text-slate-900">
-                {viewingPatient.age} / {viewingPatient.gender}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Contact</p>
-              <p className="mt-1 text-slate-900">{viewingPatient.contact || 'N/A'}</p>
+
+            <div className="border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Billing</p>
+                {viewingPatientBills.length > 0 && (
+                  <button
+                    onClick={() => openReceipt(viewingPatient, viewingPatientBills)}
+                    className="rounded bg-brand-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-accent-dark"
+                  >
+                    Download Receipt
+                  </button>
+                )}
+              </div>
+              {viewingPatientBills.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-500">No billing records yet.</p>
+              ) : (
+                <ul className="mt-3 space-y-2 text-sm">
+                  {viewingPatientBills.map((bill) => (
+                    <li key={bill.id} className="flex items-center justify-between">
+                      <span className="text-slate-700">
+                        {bill.description}
+                        {bill.specialty ? ` (${bill.specialty})` : ''}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className={`text-xs font-medium ${billingStatusColor[bill.status]}`}>
+                          {bill.status}
+                        </span>
+                        <span className="font-semibold text-slate-900">{formatKsh(bill.amount)}</span>
+                        {bill.source === 'appointment' && (
+                          <button
+                            onClick={() => handleMarkBillPaid(bill)}
+                            className="rounded border border-brand-accent text-brand-accent px-2 py-0.5 text-xs font-medium hover:bg-brand-lavender"
+                          >
+                            {bill.status === 'Paid' ? 'Mark pending' : 'Mark paid'}
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                  <li className="flex items-center justify-between border-t border-slate-200 pt-2 font-semibold text-slate-900">
+                    <span>Total</span>
+                    <span>{formatKsh(viewingPatientBills.reduce((sum, bill) => sum + bill.amount, 0))}</span>
+                  </li>
+                </ul>
+              )}
             </div>
           </div>
         )}
