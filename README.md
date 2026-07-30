@@ -8,6 +8,18 @@ A role-based hospital management system frontend built with React, Vite, and Tai
 - Tailwind CSS
 - React Router
 
+## Backend Setup
+
+See [backend/README.md](backend/README.md) - uses `pipenv` for dependencies (not plain `venv`/`pip` anymore).
+
 ## Demo Login
 
-This project currently uses mock data, no backend yet. Sign in with one of these demo accounts:
+Sign in with one of these demo accounts (seeded via `pipenv run flask seed-users` - see backend README):
+
+| Role | Email | Password |
+|---|---|---|
+| Doctor | doctor@meridian.com | doctor123 |
+| Receptionist | reception@meridian.com | reception123 |
+| Nurse | nurse@meridian.com | nurse123 |
+| Pharmacy | pharmacy@meridian.com | pharmacy123 |
+| Admin | admin@meridian.com | admin123 |
