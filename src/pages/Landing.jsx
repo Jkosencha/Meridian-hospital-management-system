@@ -227,7 +227,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
           <div>
             <p className="text-2xl md:text-3xl font-bold uppercase tracking-wide text-brand-accent">Book a visit</p>
-            <h2 className="mt-2 text-lg md:text-xl font-bold text-slate-900">
+            <h2 className="mt-2 text-lg md:text-xl font-bold italic text-slate-900">
               Book your appointment in minutes
             </h2>
             <p className="mt-4 text-slate-600 leading-relaxed">
@@ -254,7 +254,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center max-w-2xl mx-auto">
             <p className="text-2xl md:text-3xl font-bold uppercase tracking-wide text-brand-accent">What we treat</p>
-            <h2 className="mt-2 text-lg md:text-xl font-bold text-slate-900">Our specialties</h2>
+            <h2 className="mt-2 text-lg md:text-xl font-bold italic text-slate-900">Our specialties</h2>
             <p className="mt-4 text-slate-600">Every specialty below is available to book above.</p>
           </div>
           <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -278,7 +278,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center max-w-2xl mx-auto">
             <p className="text-2xl md:text-3xl font-bold uppercase tracking-wide text-brand-accent">Why Meridian</p>
-            <h2 className="mt-2 text-lg md:text-xl font-bold text-slate-900">Care built around you</h2>
+            <h2 className="mt-2 text-lg md:text-xl font-bold italic text-slate-900">Care built around you</h2>
           </div>
           <div className="mt-12 grid sm:grid-cols-3 gap-8">
             {features.map(({ title, description }) => (
