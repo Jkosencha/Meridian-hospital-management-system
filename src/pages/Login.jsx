@@ -59,8 +59,8 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="mt-6 text-sm font-medium text-brand-accent">
-           Forgot Password
+        <p className="mt-6 text-sm text-slate-500">
+          Forgot your password? Contact your administrator to have it reset.
         </p>
       </div>
     </div>
