@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import Sidebar from '../components/Sidebar'
 import Modal from '../components/Modal'
 import DataTable from '../components/DataTable'
 import { statusOptions } from '../data/appointments'
-import { getAppointments, updateAppointment, createPrescription } from '../lib/api'
+import { getAppointments, updateAppointment, createPrescription, deletePrescription } from '../lib/api'
+import { usePolling } from '../lib/usePolling'
+import { useTabParam } from '../lib/useTabParam'
+import StatCard from '../components/StatCard'
 
 const navItems = [
   { key: 'overview', label: 'Overview' },
@@ -80,19 +83,27 @@ const emptyPrescription = { diagnosis: '', notes: '', prescription: '' }
 export default function DoctorDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useTabParam('overview')
   const [appointments, setAppointments] = useState([])
   const [loadError, setLoadError] = useState('')
   const [viewingAppointment, setViewingAppointment] = useState(null)
   const [prescribingAppointment, setPrescribingAppointment] = useState(null)
   const [prescriptionForm, setPrescriptionForm] = useState(emptyPrescription)
   const [prescriptionError, setPrescriptionError] = useState('')
+  const [deletingPrescriptionId, setDeletingPrescriptionId] = useState(null)
+  const [prescriptionListError, setPrescriptionListError] = useState('')
 
-  useEffect(() => {
-    getAppointments()
+  function loadData() {
+    return getAppointments()
       .then(setAppointments)
       .catch(() => setLoadError('Could not load data from the server.'))
+  }
+
+  useEffect(() => {
+    loadData()
   }, [])
+
+  usePolling(loadData)
 
   function handleLogout() {
     logout()
@@ -146,6 +157,27 @@ export default function DoctorDashboard() {
     }
   }
 
+  async function handleDeletePrescription(appointmentId, prescriptionId) {
+    try {
+      await deletePrescription(prescriptionId)
+      setAppointments((prev) =>
+        prev.map((appt) =>
+          appt.id === appointmentId
+            ? { ...appt, prescriptions: appt.prescriptions.filter((p) => p.id !== prescriptionId) }
+            : appt
+        )
+      )
+      setViewingAppointment((prev) =>
+        prev && prev.id === appointmentId
+          ? { ...prev, prescriptions: prev.prescriptions.filter((p) => p.id !== prescriptionId) }
+          : prev
+      )
+      setDeletingPrescriptionId(null)
+    } catch (err) {
+      setPrescriptionListError(err.message || 'Could not delete prescription. Please try again.')
+    }
+  }
+
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -161,7 +193,7 @@ export default function DoctorDashboard() {
   })
 
   return (
-    <div className="min-h-screen flex bg-blue-300">
+    <div className="min-h-screen flex bg-brand-sky">
       <Sidebar
         navItems={navItems}
         activeKey={tab}
@@ -182,17 +214,11 @@ export default function DoctorDashboard() {
             <p className="text-sm text-slate-500 mt-0.5">{today}</p>
 
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="border border-slate-200 bg-white px-6 py-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Today's appointments</p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{appointments.length}</p>
-              </div>
-              <div className="border border-slate-200 bg-white px-6 py-5">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pending</p>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{pendingCount}</p>
-              </div>
+              <StatCard label="Today's appointments" value={appointments.length} />
+              <StatCard label="Pending" value={pendingCount} />
             </div>
 
-            <div className="mt-8 border border-slate-200 bg-blue-200 overflow-hidden">
+            <div className="mt-8 border border-slate-200 bg-white overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-200">
                 <h2 className="text-sm font-medium text-slate-900">Next up</h2>
               </div>
@@ -209,7 +235,7 @@ export default function DoctorDashboard() {
           <>
             <h1 className="text-xl font-semibold text-slate-900">Appointments</h1>
             <p className="text-sm text-slate-500 mt-0.5">{today}</p>
-            <div className="mt-6 border border-slate-200 bg-blue-200 overflow-hidden">
+            <div className="mt-6 border border-slate-200 bg-white overflow-hidden">
               <DataTable
                 columns={appointmentColumns}
                 data={appointments}
@@ -224,7 +250,11 @@ export default function DoctorDashboard() {
 
       <Modal
         open={!!viewingAppointment}
-        onClose={() => setViewingAppointment(null)}
+        onClose={() => {
+          setViewingAppointment(null)
+          setDeletingPrescriptionId(null)
+          setPrescriptionListError('')
+        }}
         title={viewingAppointment ? `${viewingAppointment.name}: Triage details` : ''}
         maxWidthClass="max-w-3xl"
       >
@@ -289,12 +319,40 @@ export default function DoctorDashboard() {
             {viewingAppointment.prescriptions.length > 0 && (
               <div className="pt-5">
                 <p className="text-xs uppercase tracking-wide text-brand-accent font-semibold">Prescriptions</p>
+                {prescriptionListError && (
+                  <p className="mt-2 text-sm text-red-600">{prescriptionListError}</p>
+                )}
                 <ul className="mt-2 space-y-3">
-                  {viewingAppointment.prescriptions.map((p, i) => (
-                    <li key={i}>
-                      <p className="text-slate-900 font-medium">{p.diagnosis}</p>
-                      <p className="text-slate-700">{p.notes}</p>
-                      <p className="text-slate-700 italic">{p.prescription}</p>
+                  {viewingAppointment.prescriptions.map((p) => (
+                    <li key={p.id} className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-slate-900 font-medium">{p.diagnosis}</p>
+                        <p className="text-slate-700">{p.notes}</p>
+                        <p className="text-slate-700 italic">{p.prescription}</p>
+                      </div>
+                      {deletingPrescriptionId === p.id ? (
+                        <div className="flex shrink-0 gap-1.5">
+                          <button
+                            onClick={() => setDeletingPrescriptionId(null)}
+                            className="rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleDeletePrescription(viewingAppointment.id, p.id)}
+                            className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+                          >
+                            Confirm
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeletingPrescriptionId(p.id)}
+                          className="shrink-0 rounded border border-red-300 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
