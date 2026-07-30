@@ -1,20 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  Activity,
-  Baby,
-  CheckCircle2,
-  Clock,
-  HeartPulse,
-  Mail,
-  MapPin,
-  Phone,
-  ShieldCheck,
-  Smile,
-  Stethoscope,
-  Users,
-  Venus,
-} from 'lucide-react'
+import { Activity, Baby, CheckCircle2, HeartPulse, Smile, Stethoscope, Venus } from 'lucide-react'
 import { createAppointment } from '../lib/api'
 import { specialties } from '../data/specialties'
 import { countDigits } from '../lib/validators'
@@ -29,9 +15,9 @@ const specialtyDetails = [
 ]
 
 const features = [
-  { icon: Clock, title: '24/7 Emergency Care', description: 'Our emergency team is on call around the clock.' },
-  { icon: ShieldCheck, title: 'Certified Specialists', description: 'Licensed, experienced doctors across every department.' },
-  { icon: Users, title: 'Patient-First Approach', description: 'Personalized care plans built around you.' },
+  { title: '24/7 Emergency Care', description: 'Our emergency team is on call around the clock.' },
+  { title: 'Certified Specialists', description: 'Licensed, experienced doctors across every department.' },
+  { title: 'Patient-First Approach', description: 'Personalized care plans built around you.' },
 ]
 
 const bookingChecklist = [
@@ -43,7 +29,7 @@ const bookingChecklist = [
 function HeroBackground() {
   return (
     <div className="absolute inset-0 -z-10 overflow-hidden bg-brand-navy" aria-hidden="true">
-      <img src="/bg3.jpg" alt="" className="h-full w-full object-cover opacity-80" />
+      <img src="/bg2.jpg" alt="" className="h-full w-full object-cover opacity-80" />
       <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/80 via-brand-navy/60 to-brand-navy/90" />
     </div>
   )
@@ -195,6 +181,8 @@ export default function Landing() {
           </nav>
           <Link
             to="/login"
+            target="_blank"
+            rel="noopener noreferrer"
             className="rounded bg-brand-accent text-white text-sm font-medium px-6 py-2 transition-colors hover:bg-brand-accent-dark"
           >
             Sign in
@@ -225,6 +213,8 @@ export default function Landing() {
             </a>
             <Link
               to="/login"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-block rounded border border-white/30 text-white px-8 py-3 text-base font-medium transition-colors hover:bg-white/10"
             >
               Staff sign in
@@ -245,8 +235,7 @@ export default function Landing() {
             </p>
             <ul className="mt-6 space-y-3">
               {bookingChecklist.map((item) => (
-                <li key={item} className="flex items-center gap-2.5 text-sm text-slate-700">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-brand-accent" />
+                <li key={item} className="text-sm text-slate-700">
                   {item}
                 </li>
               ))}
@@ -292,12 +281,9 @@ export default function Landing() {
             <h2 className="mt-2 text-lg md:text-xl font-bold text-slate-900">Care built around you</h2>
           </div>
           <div className="mt-12 grid sm:grid-cols-3 gap-8">
-            {features.map(({ icon: Icon, title, description }) => (
+            {features.map(({ title, description }) => (
               <div key={title} className="text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white">
-                  <Icon className="h-6 w-6 text-brand-accent" />
-                </div>
-                <h3 className="mt-4 font-semibold text-slate-900">{title}</h3>
+                <h3 className="font-semibold text-slate-900">{title}</h3>
                 <p className="mt-1.5 text-sm text-slate-600">{description}</p>
               </div>
             ))}
@@ -305,28 +291,10 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden py-24">
-        <img src="/bg6.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" aria-hidden="true" />
-        <div className="absolute inset-0 bg-brand-navy/80" aria-hidden="true" />
-        <div className="relative max-w-3xl mx-auto px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white">Ready when you are</h2>
-          <p className="mt-4 text-slate-200">Book your visit today and our team will take it from there.</p>
-          <a
-            href="#book-appointment"
-            className="inline-block mt-8 rounded bg-brand-accent text-white px-8 py-3 text-base font-medium transition-colors hover:bg-brand-accent-dark"
-          >
-            Book an appointment
-          </a>
-        </div>
-      </section>
-
       <footer className="bg-brand-navy border-t border-white/10">
         <div className="max-w-6xl mx-auto px-6 py-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
           <div>
-            <div className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5 text-brand-accent" />
-              <span className="text-base font-bold text-white">Meridian Hospital</span>
-            </div>
+            <span className="text-base font-bold text-white">Meridian Hospital</span>
             <p className="mt-3 text-sm leading-relaxed text-slate-400">
               A full-service hospital system connecting patients, doctors, nurses and
               administrators under one platform.
@@ -347,7 +315,12 @@ export default function Landing() {
                 </a>
               </li>
               <li>
-                <Link to="/login" className="text-slate-300 hover:text-white transition-colors">
+                <Link
+                  to="/login"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-slate-300 hover:text-white transition-colors"
+                >
                   Sign in
                 </Link>
               </li>
@@ -356,19 +329,10 @@ export default function Landing() {
 
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contact</h3>
-            <ul className="mt-4 space-y-3 text-sm text-slate-300">
-              <li className="flex items-start gap-2.5">
-                <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-brand-accent" />
-                <span>Kimathi Street, Nairobi, Kenya</span>
-              </li>
-              <li className="flex items-center gap-2.5">
-                <Phone className="h-4 w-4 shrink-0 text-brand-accent" />
-                <span>+254 700 123 456</span>
-              </li>
-              <li className="flex items-center gap-2.5">
-                <Mail className="h-4 w-4 shrink-0 text-brand-accent" />
-                <span>info@meridianhospital.com</span>
-              </li>
+            <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              <li>Kimathi Street, Nairobi, Kenya</li>
+              <li>+254 700 123 456</li>
+              <li>info@meridianhospital.com</li>
             </ul>
           </div>
         </div>
