@@ -3,12 +3,14 @@ services:
     name: meridian-backend
     runtime: python
     rootDir: backend
-    buildCommand: pip install pipenv && pipenv install --system --skip-lock
+    buildCommand: pip install pipenv && pipenv install --deploy --system
     startCommand: flask db upgrade && flask seed-users && gunicorn run:app --bind 0.0.0.0:$PORT
     envVars:
+      - key: DATABASE_URL
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: FRONTEND_URL
         value: "*"
       - key: PYTHON_VERSION
-        value: "3.13.4"
+        value: "3.14.5"
