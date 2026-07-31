@@ -1,3 +1,5 @@
+import os
+
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -15,7 +17,8 @@ def create_app(config_class=Config):
 
     db.init_app(app)
     migrate.init_app(app, db)
-    CORS(app)
+    frontend_origins = os.environ.get("FRONTEND_URL", "*").split(",")
+    CORS(app, origins=frontend_origins)
 
     from app import models  # noqa: F401 - ensures models are registered before migrations
     from app.routes import api
