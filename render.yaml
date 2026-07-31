@@ -3,6 +3,7 @@ services:
     name: meridian-backend
     runtime: python
     rootDir: backend
+    plan: free
     buildCommand: pip install pipenv && pipenv install --deploy --system
     startCommand: flask db upgrade && flask seed-users && gunicorn run:app --bind 0.0.0.0:$PORT
     envVars:
