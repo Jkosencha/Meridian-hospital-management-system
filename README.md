@@ -1,6 +1,6 @@
 # Meridian Hospital Management System
 
-A role-based hospital management system frontend built with React, Vite, and Tailwind CSS.
+A role-based hospital management system built with React, Vite, and Tailwind CSS.
 
 ## Tech Stack
 
